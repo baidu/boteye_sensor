@@ -1,6 +1,6 @@
 ## boteye_sensor ##
 This repo contains hardware and firmware of Baidu boteye sensor.  
-**If you purchase the [hardware from Kinco Automation](http://www.kinco.cn/solution/detail?id=36&type=all)(a third party manufacturer), which is already loaded with the latest firmware, you can skip the following steps. **
+**If you purchase the [hardware from Kinco Automation](http://www.kinco.cn/solution/detail?id=36&type=all)(a third party manufacturer), which is already loaded with the latest firmware, you can skip the following steps.**
 
 ## Hardware Introduction
 
