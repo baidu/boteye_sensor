@@ -182,7 +182,7 @@ void V034_delay(volatile int time) {
 ********************************************************************************************/
 /* This is 640*480,from 752*480(Enable line 162 and line 166), Now it's 60.9Hz from Sensor */
 #define SENSOR_VGA
-const uint16_t MT9V034_Parallel[] = {
+uint16_t MT9V034_Parallel[] = {
 #ifdef SENSOR_VGA
       0x01, XP_START_COL,   // COL_WINDOW_START_CONTEXTA_REG
 #else

@@ -51,6 +51,10 @@ enum LED_TYPE {
   LED_OFF = 0,
   LED_ON  = 1,
 };
+enum SENSOR_POWER_PMODE {
+  ACTIVE = 0,
+  STANDBY  = 1
+};
 /* variable declaration*/
 extern int hardware_version_num;
 char* Baidu_ProductDscr[16];
@@ -66,4 +70,5 @@ extern int hadrware_version_detect(void);
 extern void v034_set_unified_addr(void);
 extern void v034_power_on(void);
 extern void v034_power_off(void);
+extern void sensor_set_power_mode(enum SENSOR_POWER_PMODE state);
 #endif  // FIRMWARE_INCLUDE_FX3_BSP_H_

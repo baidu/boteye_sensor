@@ -151,7 +151,7 @@ SCH_ShowNoErc=-1
 SCH_ShowParameter=-1
 SCH_ShowProbes=-1
 SCH_ShowBlankets=-1
-OutputFileName=XPIAC_1V3.PrjPCB=E:\stm32模块\模块调试\WIFI图像\news\XPerception开源\XP2S\schematic\XPIAC_1V3\XPIAC_1V3.pdf
+OutputFileName=XPIAC_1V3.PrjPCB=F:\hardware\XP2\schematic\XPIAC_1V3\XPIAC_1V3.pdf
 SCH_ExpandLogicalToPhysical=0
 SCH_VariantName=[No Variations]
 SCH_ExpandComponentDesignators=-1

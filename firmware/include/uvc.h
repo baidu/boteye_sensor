@@ -34,8 +34,17 @@
 #define DEBUG_INFO_BIT          (0x01 << 1)
 #define DEBUG_DUMP_BIT          (0x01 << 2)
 #define IMU_FROM_IMAGE_BIT      (0x01 << 3)
+#define PRINT_FRAME_RATE_BIT    (0x01 << 4)
 extern uint32_t firmware_ctrl_flag;
 
+enum  SensorType {
+  XP_XP2 = 0,
+  XP2s = 1,
+  XP3 = 2,
+  XP3s = 3,
+  XPIRL = 4
+};
+extern enum SensorType sensor_type;
 /* Definitions to enable/disable special features in this UVC application. */
 // Enable if Pan, Tilt and Zoom controls are to be implemented.
 // #define UVC_PTZ_SUPPORT
@@ -250,6 +259,7 @@ extern uint32_t firmware_ctrl_flag;
 #define CY_FX_UVC_XU_REG_RW                                 (uint16_t)(0x0e00)
 #define CY_FX_UVC_XU_HVER_RW                                (uint16_t)(0x0f00)
 #define CY_FX_UVC_XU_FLAG_RW                                (uint16_t)(0x1000)
+#define CY_FX_UVC_XU_TLC_RW                                 (uint16_t)(0x1100)
 
 extern void CyFxAppErrorHandler(CyU3PReturnStatus_t apiRetStatus);
 #endif  // FIRMWARE_INCLUDE_UVC_H_

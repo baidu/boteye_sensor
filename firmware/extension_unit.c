@@ -30,6 +30,7 @@
 #include "include/uvc.h"
 #include "include/xp_sensor_firmware_version.h"
 #include "include/inv_icm20608.h"
+#include "include/tlc59116.h"
 
 uint16_t glSpiPageSize = 0x100;  /* SPI Page size to be used for transfers. */
 /* Give a timeout value of 5s for any flash programming. */
@@ -411,6 +412,65 @@ void EU_Rqts_firmware_flag(uint8_t bRequest) {
     sensor_err("unknown firmware_flag cmd: 0x%x\r\n", bRequest);
     CyU3PUsbStall(0, CyTrue, CyFalse);
     break;
+  }
+}
+
+/**
+ *  @brief      control firmware flag.
+ *  @param[out] bRequest    bRequst value of uvc.
+ *  @return     0 if successful.
+ */
+void EU_Rqts_tlc59116_control(uint8_t bRequest) {
+  uint8_t Ep0Buffer[32] = {0};
+  uint16_t readCount;
+  CyU3PReturnStatus_t apiRetStatus = CY_U3P_SUCCESS;
+
+  switch (bRequest) {
+  case CY_FX_USB_UVC_GET_CUR_REQ:
+    if (sensor_type == XPIRL) {
+      Ep0Buffer[0] = *((uint32_t *)(&tl59116_ctrl)) >> 24;
+      Ep0Buffer[1] = *((uint32_t *)(&tl59116_ctrl)) >> 16;
+      Ep0Buffer[2] = *((uint32_t *)(&tl59116_ctrl)) >> 8;
+      Ep0Buffer[3] = *((uint32_t *)(&tl59116_ctrl)) >> 0;
+      sensor_dbg("EU tlc59116 control read : 0x%x\r\n", tl59116_ctrl);
+    } else {
+      sensor_err("This sensor type don't support infrared light read control.\r\n");
+    }
+    CyU3PUsbSendEP0Data(4, Ep0Buffer);
+    break;
+  case CY_FX_USB_UVC_SET_CUR_REQ:
+    apiRetStatus = CyU3PUsbGetEP0Data(4, Ep0Buffer, &readCount);
+    if (apiRetStatus != CY_U3P_SUCCESS) {
+      sensor_err("CyU3 get Ep0 data failed\r\n");
+      CyFxAppErrorHandler(apiRetStatus);
+    }
+    if (sensor_type == XPIRL) {
+      if ((Ep0Buffer[3] & 0x80) == 0)
+        Ep0Buffer[3] = Ep0Buffer[3] | 0x80;
+      uint32_t tl59116_ctrl_tmp = Ep0Buffer[0] << 24 | Ep0Buffer[1] << 16 |
+                                  Ep0Buffer[2] << 8 | Ep0Buffer[3];
+      CyU3PMemCopy((uint8_t *)(&tl59116_ctrl), (uint8_t *)(&tl59116_ctrl_tmp),
+                    sizeof(tl59116_ctrl));
+      sensor_dbg("EU tlc59116 control set : 0x%x\r\n", tl59116_ctrl);
+    } else {
+      sensor_err("This sensor type don't support infrared light set control.\r\n");
+    }
+    break;
+  case CY_FX_USB_UVC_GET_LEN_REQ:
+    Ep0Buffer[0] = 4;
+    Ep0Buffer[1] = 0;
+    CyU3PUsbSendEP0Data(2, (uint8_t *)Ep0Buffer);
+    sensor_dbg("EU tlc59116 control get len:%d request\r\n", Ep0Buffer[0]);
+    break;
+  case CY_FX_USB_UVC_GET_INFO_REQ:
+    Ep0Buffer[0] = 3;
+    CyU3PUsbSendEP0Data(1, (uint8_t *)Ep0Buffer);
+    sensor_dbg("EU tlc59116 control get info request\r\n");
+    break;
+  default:
+    sensor_err("unknown tlc59116 control cmd: 0x%x\r\n", bRequest);
+    CyU3PUsbStall(0, CyTrue, CyFalse);
+  //   break;
   }
 }
 

@@ -61,7 +61,7 @@ SCH_ShowNoErc=-1
 SCH_ShowParameter=-1
 SCH_ShowProbes=-1
 SCH_ShowBlankets=-1
-OutputFileName=XPCAM_1V0.PrjPCB=E:\stm32Ä£¿é\Ä£¿éµ÷ÊÔ\WIFIÍ¼Ïñ\news\XPerception\XPCAM_024\XPCAM_1V0.pdf
+OutputFileName=XPCAM-C_1V4.PrjPCB=F:\hardware\XP3\schematic\XPCAM-C_1V4\XPCAM-C_1V4.pdf
 SCH_ExpandLogicalToPhysical=0
 SCH_VariantName=[No Variations]
 SCH_ExpandComponentDesignators=-1

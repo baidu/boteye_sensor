@@ -40,7 +40,7 @@ typedef unsigned int  uint;
 #define V034_MANUAL_EXPOSURE_MODE      1
 
 #define IMGS_CHIP_ID                   (0x1324)
-
+extern uint16_t MT9V034_Parallel[];
 /*****************************************************************************
 **                                          function declaration
 ******************************************************************************/

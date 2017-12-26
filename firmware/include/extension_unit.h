@@ -31,6 +31,7 @@ void EU_Rqts_spi_flash(uint8_t bRequest);
 extern void EU_Rqts_soft_version(uint8_t bRequest);
 extern void EU_Rqts_hard_version(uint8_t bRequest);
 extern void EU_Rqts_firmware_flag(uint8_t bRequest);
+extern void EU_Rqts_tlc59116_control(uint8_t bRequest);
 extern CyU3PReturnStatus_t CyFxFlashProgEraseSector(CyBool_t isErase, uint8_t sector, uint8_t *wip);
 extern CyU3PReturnStatus_t CyFxFlashProgSpiInit(uint16_t pageLen);
 CyU3PReturnStatus_t CyFxFlashProgSpiTransfer(uint16_t  pageAddress, uint16_t  byteCount,

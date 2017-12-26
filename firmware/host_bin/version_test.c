@@ -44,7 +44,7 @@ char *Baidu_ProductDscr[16] = {
   "Baidu_Robotics_vision_XP2S",
   "Baidu_Robotics_vision_XP3",
   "Baidu_Robotics_vision_XP3S",
-  "Baidu_Robotics_vision_undefined_0100",
+  "Baidu_Robotics_vision_XPIRL",
   "Baidu_Robotics_vision_undefined_0101",
   "Baidu_Robotics_vision_undefined_0110",
   "Baidu_Robotics_vision_undefined_0111",

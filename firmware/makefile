@@ -30,6 +30,7 @@ SOURCE= uvc.c	sensor_v034_raw.c camera_ptzcontrol.c\
 	extension_unit.c\
 	fx3_bsp.c\
 	kfifo.c\
+	tlc59116.c\
 	cyfxtx.c
 
 ifeq ($(CYFXBUILD),arm)

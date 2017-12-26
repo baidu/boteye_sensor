@@ -45,13 +45,14 @@
 #include "include/cyfxuvcdscr.h"
 #include "include/fx3_bsp.h"
 #include "include/kfifo.h"
-
+#include "include/tlc59116.h"
 /* debug_level :control debug log messages print level
  * 0 bit set: show debug level log
  * 1 bit set: show messages level log
  * 2 bit set: show buff messages logging */
 int debug_level = 0;
 uint32_t firmware_ctrl_flag;
+enum SensorType sensor_type;
 /******************************************************************************
                                          Global Variables
  *****************************************************************************/
@@ -664,8 +665,17 @@ static void CyFxUVCApplnInit(void) {
   readyIMU = CyTrue;
   sensor_dbg("IMU is ready!\r\n");
   /* Initialize v034/v024 senosr */
+  if (sensor_type == XPIRL) {
+    // open led_out for XPIRL
+    MT9V034_Parallel[(0x1B -1) * 2 + 1] = 0x0000;
+  }
   V034_sensor_init();
-
+  CyU3PThreadSleep(10);
+  sensor_set_power_mode(STANDBY);
+  /* init tlc59116 */
+  if (sensor_type == XPIRL) {
+    tlc59116_init();
+  }
   /* USB initialization. */
   apiRetStatus = CyU3PUsbStart();
   if (apiRetStatus != CY_U3P_SUCCESS) {
@@ -806,7 +816,8 @@ void UVC_AppThread_Entry(uint32_t input) {
 #ifdef DEBUG_PRINT_FRAME_COUNT
   uint32_t frameCnt = 0;
 #endif
-
+  uint32_t current_time = 0;
+  uint32_t last_time = 0;
   /* Initialize the Uart Debug Module */
   CyFxUVCApplnDebugInit();
   sensor_dbg("Uart Debug Module init succeed, compiled at [%s] %s\r\n", __TIME__, __DATE__);
@@ -876,6 +887,11 @@ void UVC_AppThread_Entry(uint32_t input) {
 #ifdef BACKFLOW_DETECT
         back_flow_detected = 0;
 #endif
+        if (firmware_ctrl_flag & PRINT_FRAME_RATE_BIT) {
+          current_time = CyU3PGetTime();
+          sensor_info("a frame Transfer time:%d ms\r\n", (current_time - last_time));
+          last_time = current_time;
+        }
         // sensor_dbg("<hitFV && (prodCount == consCount)>\r\n");
         /* Toggle UVC header FRAME ID bit */
         glUVCHeader[1] ^= CY_FX_UVC_HEADER_FRAME_ID;
@@ -910,6 +926,8 @@ void UVC_AppThread_Entry(uint32_t input) {
         IMU_kfifo.kfifo_flag &= ~KFIFO_IS_START;
         sensor_dbg("got CY_FX_UVC_STREAM_ABORT_EVENT \r\n");
         V034_stream_stop(SENSOR_ADDR_WR);
+        CyU3PThreadSleep(10);
+        sensor_set_power_mode(STANDBY);
 
         if (!clearFeatureRqtReceived) {
           apiRetStatus = CyU3PDmaMultiChannelReset(&glChHandleUVCStream);
@@ -1252,10 +1270,15 @@ static void Handle_ExtensionUnit_Rqts(void) {
     break;
   case CY_FX_UVC_XU_SVER_RW:
     EU_Rqts_soft_version(bRequest);
+    break;
   case CY_FX_UVC_XU_HVER_RW:
     EU_Rqts_hard_version(bRequest);
+    break;
   case CY_FX_UVC_XU_FLAG_RW:
     EU_Rqts_firmware_flag(bRequest);
+    break;
+  case CY_FX_UVC_XU_TLC_RW:
+    EU_Rqts_tlc59116_control(bRequest);
     break;
   default:
     sensor_err("invalid extension cmd: 0x%x\r\n", wValue);
@@ -1358,9 +1381,9 @@ static void Handle_VideoStreaming_Rqts(void) {
           switch (glProbeCtrl[3]) {
           case 1:
             sensor_dbg(" <start stream - default VGA> \r\n");
+            sensor_set_power_mode(ACTIVE);
+            CyU3PThreadSleep(10);
             V034_stream_start(SENSOR_ADDR_WR);
-            break;
-          case 2:
             break;
           default:
             break;
@@ -1476,7 +1499,7 @@ void Data_handle_Thread_Entry(uint32_t input) {
   sensor_dbg("start Data handle thread!\r\n");
   for (;;) {
     ++count;
-    if (glIsApplnActive && readyIMU == CyTrue && (IMU_kfifo.kfifo_flag & KFIFO_IS_START)) {
+    if (glIsApplnActive && readyIMU == CyTrue) {
 #ifdef IMU_LOOP_SAMPLE
       uint8_t raw_IMU_data[14];
       status = icm_get_sensor_reg(raw_IMU_data, 0);
@@ -1496,7 +1519,7 @@ void Data_handle_Thread_Entry(uint32_t input) {
       last_imu[15] = t >> 0;
       /* show this version can get burst imu from image. */
       last_imu[16] = 0;
-      if (firmware_ctrl_flag & IMU_FROM_IMAGE_BIT) {
+      if ((firmware_ctrl_flag & IMU_FROM_IMAGE_BIT) && (IMU_kfifo.kfifo_flag & KFIFO_IS_START)) {
         CyU3PMutexGet(&(IMU_kfifo.lock), CYU3P_WAIT_FOREVER);
         if (kfifo_unused(&IMU_kfifo) >= sizeof(last_imu)) {
           kfifo_in(&IMU_kfifo, (void *)last_imu, sizeof(last_imu));
@@ -1510,6 +1533,32 @@ void Data_handle_Thread_Entry(uint32_t input) {
     } else {
       /* No active data transfer. Sleep for a small amount of time. */
       CyU3PThreadSleep(100);
+    }
+    if (sensor_type == XPIRL && tl59116_ctrl.UpdateBit == 1) {
+      if (tl59116_ctrl.dumpRegister == 1)
+        tlc59116_dump_register();
+      if (tl59116_ctrl.SetCH_on_mode == 0 && tl59116_ctrl.SetCH_pwm_mode == 0) {
+        // CHECK channel_value if is 0, will close default close channel
+        if (tl59116_ctrl.channel_value == 0 )
+          tl59116_ctrl.channel_value = TLC59116_DEFAULT_CLOSE_CH;
+        tlc59116_off(tl59116_ctrl.channel_value);
+      } else if (tl59116_ctrl.SetCH_on_mode == 1 && tl59116_ctrl.SetCH_pwm_mode == 0) {
+        // CHECK channel_value if is 0, will close default open channel
+        if (tl59116_ctrl.channel_value == 0 )
+          tl59116_ctrl.channel_value = TLC59116_DEFAULT_OPEN_CH;
+        sensor_info("tl59116: on mode, channel:0x%x\r\n", tl59116_ctrl.channel_value);
+        tlc59116_CH_on(tl59116_ctrl.channel_value);
+      } else if (tl59116_ctrl.SetCH_on_mode == 0 && tl59116_ctrl.SetCH_pwm_mode == 1) {
+        // CHECK channel_value if is 0, will close default open channel
+        if (tl59116_ctrl.channel_value == 0 )
+          tl59116_ctrl.channel_value = TLC59116_DEFAULT_OPEN_CH;
+        sensor_info("tl59116: pwm mode, channel:0x%x pwm_value:%d\r\n", tl59116_ctrl.channel_value,
+                                                                 tl59116_ctrl.pwm_value);
+        tlc59116_set_pwm(tl59116_ctrl.channel_value, tl59116_ctrl.pwm_value);
+      } else {
+        sensor_err("tl59116 channel set error\r\n");
+      }
+      tl59116_ctrl.UpdateBit = 0;
     }
     /* Allow other ready threads to run before proceeding. */
     CyU3PThreadRelinquish();
@@ -1592,6 +1641,7 @@ int main(void) {
   firmware_ctrl_flag = firmware_ctrl_flag | DEBUG_INFO_BIT;
   firmware_ctrl_flag = firmware_ctrl_flag | DEBUG_DUMP_BIT;
   firmware_ctrl_flag = firmware_ctrl_flag | IMU_FROM_IMAGE_BIT;
+  // firmware_ctrl_flag = firmware_ctrl_flag | PRINT_FRAME_RATE_BIT;
 
   debug_level = firmware_ctrl_flag & (DEBUG_DBG_BIT | DEBUG_INFO_BIT |DEBUG_DUMP_BIT);
   /* Initialize the device */

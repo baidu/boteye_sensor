@@ -27,7 +27,7 @@ char *Baidu_ProductDscr[16] = {
   "Baidu_Robotics_vision_XP2S",
   "Baidu_Robotics_vision_XP3",
   "Baidu_Robotics_vision_XP3S",
-  "Baidu_Robotics_vision_undefined_0100",
+  "Baidu_Robotics_vision_XPIRL",
   "Baidu_Robotics_vision_undefined_0101",
   "Baidu_Robotics_vision_undefined_0110",
   "Baidu_Robotics_vision_undefined_0111",
@@ -155,6 +155,7 @@ void fx3_gpio_module_init(void) {
   }
   sensor_dbg("FX3 GPIO init finish\r\n");
   hardware_version_num = hadrware_version_detect();
+  sensor_type = (enum SensorType)hardware_version_num;
   sensor_info("hardware_version_num: 0x%x \r\n", hardware_version_num);
 }
 
@@ -247,6 +248,21 @@ void sensor_gpio_init(void) {
   return;
 }
 
+/**
+ *  @brief      sensor power mode.
+ *  @param[in]  SENSOR_POWER_PMODE: active or standby.
+ *  @return     NULL.
+ */
+void sensor_set_power_mode(enum SENSOR_POWER_PMODE state) {
+  CyU3PReturnStatus_t apiRetStatus;
+
+  apiRetStatus = CyU3PGpioSetValue(CAMERA_STANDBY_GPIO, state);
+  if (apiRetStatus != CY_U3P_SUCCESS) {
+    /* Error handling */
+    sensor_err("Camera standby GPIO Set Value Error, Error Code = 0x%x\r\n", apiRetStatus);
+    return;
+  }
+}
 /**
  *  @brief      sensor led blink.
  *  @param[in]  LED_TYPE: ON or OFF.

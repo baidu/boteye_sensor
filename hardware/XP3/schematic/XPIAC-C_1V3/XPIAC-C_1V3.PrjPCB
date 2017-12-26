@@ -136,7 +136,7 @@ SCH_ShowNoErc=-1
 SCH_ShowParameter=-1
 SCH_ShowProbes=-1
 SCH_ShowBlankets=-1
-OutputFileName=XPIMU_034.PrjPCB=E:\stm32Ä£¿é\Ä£¿éµ÷ÊÔ\WIFIÍ¼Ïñ\news\XPerception\XPIMU_034\XPIAC_2V0\XPIMU_034.pdf
+OutputFileName=XPIAC-C_1V3.PrjPCB=F:\hardware\XP3\schematic\XPIAC-C_1V3\XPIAC-C_1V3.pdf
 SCH_ExpandLogicalToPhysical=0
 SCH_VariantName=[No Variations]
 SCH_ExpandComponentDesignators=-1
