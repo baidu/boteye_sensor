@@ -1378,26 +1378,17 @@ static void Handle_VideoStreaming_Rqts(void) {
       sensor_dbg("bRequest = CY_FX_USB_UVC_SET_CUR_REQ\r\n");
       if (apiRetStatus == CY_U3P_SUCCESS) {
         if (usbSpeed == CY_U3P_SUPER_SPEED) {
-          switch (glProbeCtrl[3]) {
-          case 1:
-            sensor_dbg(" <start stream - default VGA> \r\n");
-            sensor_set_power_mode(ACTIVE);
-            CyU3PThreadSleep(10);
-            V034_stream_start(SENSOR_ADDR_WR);
-            break;
-          default:
-            break;
-          }
-
-          sensor_dbg("Res switch index: %x,Switched %d times\r\n", glProbeCtrl[3], res_switch);
-          res_switch++;
+          sensor_dbg(" <start stream - usb3.0 VGA> \r\n");
         } else {
-          sensor_dbg("<<start stream - error reset>>\r\n");
-          V034_stream_start(SENSOR_ADDR_WR);
+          sensor_dbg(" <start stream - usb2.0 VGA> \r\n");
         }
         // could merge into the setting above
         // V034_SensorChangeConfig();
-
+        sensor_dbg("Res switch index: %x,Switched %d times\r\n", glProbeCtrl[3], res_switch);
+        res_switch++;
+        sensor_set_power_mode(ACTIVE);
+        CyU3PThreadSleep(10);
+        V034_stream_start(SENSOR_ADDR_WR);
         status = kfifo_init(&IMU_kfifo, (void *)IMU_pool_buf, IMU_POOL_LEN);
         if (status)
           sensor_err("IMU kfifo init error!\r\n");
