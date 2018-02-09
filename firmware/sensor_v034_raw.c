@@ -454,7 +454,7 @@ void DRV_imgsSetRegs(void) {
 
     V034_SensorWrite2B(L_SENSOR_ADDR_WR, AddrH, AddrL, ValH, ValL);
   }
-  // dump_sensor_registers(L_SENSOR_ADDR_RD);
+  // dump_v034_registers(L_SENSOR_ADDR_RD);
   /* init Right image sensor*/
   V034_soft_reset(R_SENSOR_ADDR_WR);
   V034_ChipID_Check(R_SENSOR_ADDR_RD);
@@ -468,11 +468,11 @@ void DRV_imgsSetRegs(void) {
 
     V034_SensorWrite2B(R_SENSOR_ADDR_WR, AddrH, AddrL, ValH, ValL);
   }
-  // dump_sensor_registers(R_SENSOR_ADDR_RD);
+  // dump_v034_registers(R_SENSOR_ADDR_RD);
   /* reset two hard address to one addr, so we use SENSOR_ADDR_WR and SENSOR_ADDR_RD later  */
   v034_set_unified_addr();
 }
-void dump_sensor_registers(uint8_t SlaveAddr) {
+void dump_v034_registers(uint8_t SlaveAddr) {
   int j = 0;
   BYTE AddrH, AddrL;
   BYTE buf[2];

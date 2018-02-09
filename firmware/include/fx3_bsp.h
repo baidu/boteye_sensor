@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright 2017 Baidu Robotic Vision Authors. All Rights Reserved.
+ * Copyright 2017-2018 Baidu Robotic Vision Authors. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,9 +51,10 @@ enum LED_TYPE {
   LED_OFF = 0,
   LED_ON  = 1,
 };
-enum SENSOR_POWER_PMODE {
-  ACTIVE = 0,
-  STANDBY  = 1
+// MT9V024/034 AR0141's standby mode(ACTIVE HIGH)
+enum SENSOR_POWER_MODE {
+  SENSOR_ACTIVE   = 0,
+  SENSOR_STANDBY  = 1
 };
 /* variable declaration*/
 extern int hardware_version_num;
@@ -70,5 +71,5 @@ extern int hadrware_version_detect(void);
 extern void v034_set_unified_addr(void);
 extern void v034_power_on(void);
 extern void v034_power_off(void);
-extern void sensor_set_power_mode(enum SENSOR_POWER_PMODE state);
+extern void sensor_set_power_mode(enum SENSOR_POWER_MODE state);
 #endif  // FIRMWARE_INCLUDE_FX3_BSP_H_

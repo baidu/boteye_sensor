@@ -42,7 +42,8 @@ enum  SensorType {
   XP2s = 1,
   XP3 = 2,
   XP3s = 3,
-  XPIRL = 4
+  XPIRL = 4,
+  XPIRL2 = 5
 };
 extern enum SensorType sensor_type;
 /* Definitions to enable/disable special features in this UVC application. */
@@ -260,6 +261,7 @@ extern enum SensorType sensor_type;
 #define CY_FX_UVC_XU_HVER_RW                                (uint16_t)(0x0f00)
 #define CY_FX_UVC_XU_FLAG_RW                                (uint16_t)(0x1000)
 #define CY_FX_UVC_XU_TLC_RW                                 (uint16_t)(0x1100)
+#define CY_FX_UVC_XU_SPLAH_RW                               (uint16_t)(0x1200)
 
 extern void CyFxAppErrorHandler(CyU3PReturnStatus_t apiRetStatus);
 #endif  // FIRMWARE_INCLUDE_UVC_H_

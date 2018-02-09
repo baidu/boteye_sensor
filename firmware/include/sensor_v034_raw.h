@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright 2017 Baidu Robotic Vision Authors. All Rights Reserved.
+ * Copyright 2017-2018 Baidu Robotic Vision Authors. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,7 +61,7 @@ void V034_soft_reset(uint8_t SlaveAddr);
 BYTE V034_I2C_BUS_TEST(void);
 void V034_stream_start(uint8_t SlaveAddr);
 void V034_stream_stop(uint8_t SlaveAddr);
-void dump_sensor_registers(uint8_t SlaveAddr);
+void dump_v034_registers(uint8_t SlaveAddr);
 uint16_t V034_RegisterRead(uint8_t HighAddr, uint8_t LowAddr);
 
 /* Function    : V034_SensorGetBrightness

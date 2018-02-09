@@ -46,6 +46,8 @@
 #include "include/fx3_bsp.h"
 #include "include/kfifo.h"
 #include "include/tlc59116.h"
+#include "include/sensor_ar0141.h"
+
 /* debug_level :control debug log messages print level
  * 0 bit set: show debug level log
  * 1 bit set: show messages level log
@@ -62,7 +64,10 @@ static CyU3PThread   uvcAppEP0Thread;                   /* UVC control request h
 static CyU3PThread   Datahandle_Thread;                 /* IMU or other Data handle thread. */
 static CyU3PEvent    glFxUVCEvent;                      /* Event group used to signal threads. */
 CyU3PDmaMultiChannel glChHandleUVCStream;               /* DMA multi-channel handle. */
-
+static CyBool_t glSuspendEnbl    = CyFalse;             /* Whether Suspend Mode is requested. */
+static CyBool_t glTriggerSuspend = CyFalse;             /* Initiate suspend entry . */
+static uint8_t  glWakeUpSrc      = 0;                   /* Wakeup source from Low Power State */
+static uint8_t  glWakeUpPol      = 0;                   /* Wakeup polarity from Low Power State */
 /* Current UVC control request fields. See USB specification for definition */
 uint8_t  bmReqType, bRequest;
 uint16_t wValue, wIndex, wLength;
@@ -172,7 +177,7 @@ uint8_t volatile glUVCHeader[CY_FX_UVC_MAX_HEADER] = {
                                          Static Function
  *****************************************************************************/
 static void usb_set_desc(void);
-
+static void CyFxPowerManage(void);
 /**
  *  @brief      Add the IMU packet header to the top of the specified DMA buffer.
  *  @param[in]  buffer_p    Buffer pointer.
@@ -271,6 +276,7 @@ static void UVC_USBEvent_CB(CyU3PUsbEventType_t evtype, uint16_t evdata) {
     gpif_initialized = 0;
     streamingStarted = CyFalse;
     CyFxUVCApplnAbortHandler();
+    glSuspendEnbl = CyFalse;
     break;
 
   /* USB Suspend event for both USB 2.0 and 3.0 connections. evData is not used */
@@ -280,10 +286,12 @@ static void UVC_USBEvent_CB(CyU3PUsbEventType_t evtype, uint16_t evdata) {
     gpif_initialized = 0;
     streamingStarted = CyFalse;
     CyFxUVCApplnAbortHandler();
+    glSuspendEnbl = CyTrue;
     break;
 
   /* USB Resume event */
   case CY_U3P_USB_EVENT_RESUME:
+    glSuspendEnbl = CyFalse;
     sensor_dbg("USB RESUME event detected\r\n");
     break;
 
@@ -664,16 +672,22 @@ static void CyFxUVCApplnInit(void) {
   CyU3PThreadSleep(100);
   readyIMU = CyTrue;
   sensor_dbg("IMU is ready!\r\n");
-  /* Initialize v034/v024 senosr */
-  if (sensor_type == XPIRL) {
-    // open led_out for XPIRL
-    MT9V034_Parallel[(0x1B -1) * 2 + 1] = 0x0000;
+  if (sensor_type == XPIRL2) {
+    /* Initialize AR0141 senosr */
+    AR0141_sensor_init();
+  } else {
+    /* Initialize v034/v024 senosr */
+    if (sensor_type == XPIRL) {
+      // open led_out for XPIRL
+      MT9V034_Parallel[(0x1B -1) * 2 + 1] = 0x0000;
+    }
+    V034_sensor_init();
   }
-  V034_sensor_init();
   CyU3PThreadSleep(10);
-  sensor_set_power_mode(STANDBY);
+  // MT9V024/034 AR0141's standby mode(ACTIVE HIGH)
+  sensor_set_power_mode(SENSOR_STANDBY);
   /* init tlc59116 */
-  if (sensor_type == XPIRL) {
+  if (sensor_type == XPIRL || sensor_type == XPIRL2) {
     tlc59116_init();
   }
   /* USB initialization. */
@@ -767,7 +781,9 @@ static void usb_set_desc(void) {
 
   /* Configuration descriptors. */
   CyU3PUsbSetDesc(CY_U3P_USB_SET_HS_CONFIG_DESCR, 0, (uint8_t *)CyFxUSBHSConfigDscr);
+  update_HS_config_dscr(sensor_type);
   CyU3PUsbSetDesc(CY_U3P_USB_SET_FS_CONFIG_DESCR, 0, (uint8_t *)CyFxUSBFSConfigDscr);
+  update_SS_config_dscr(sensor_type);
   CyU3PUsbSetDesc(CY_U3P_USB_SET_SS_CONFIG_DESCR, 0, (uint8_t *)CyFxUSBSSConfigDscr);
 
   /* String Descriptors */
@@ -778,8 +794,8 @@ static void usb_set_desc(void) {
   update_hard_version_dscr();
   CyU3PUsbSetDesc(CY_U3P_USB_SET_STRING_DESCR, 2, (uint8_t *)CyFxUSBProductDscr);
 
-  /* update firmware vesion info to usb Serial Number descriptor */
-  update_soft_version_dscr();
+  /* update firmware vesion and device ID info to usb Serial Number descriptor */
+  update_serial_number_dscr();
   CyU3PUsbSetDesc(CY_U3P_USB_SET_STRING_DESCR, 3, (uint8_t *)CyFxUSBSerialNumberDscr);
 }
 /*
@@ -925,10 +941,14 @@ void UVC_AppThread_Entry(uint32_t input) {
 
         IMU_kfifo.kfifo_flag &= ~KFIFO_IS_START;
         sensor_dbg("got CY_FX_UVC_STREAM_ABORT_EVENT \r\n");
-        V034_stream_stop(SENSOR_ADDR_WR);
+        if (sensor_type == XPIRL2) {
+          AR0141_stream_stop(AR0141_ADDR_WR);
+        } else {
+          V034_stream_stop(SENSOR_ADDR_WR);
+        }
+        tlc59116_off(0xFFFF);
         CyU3PThreadSleep(10);
-        sensor_set_power_mode(STANDBY);
-
+        sensor_set_power_mode(SENSOR_STANDBY);
         if (!clearFeatureRqtReceived) {
           apiRetStatus = CyU3PDmaMultiChannelReset(&glChHandleUVCStream);
           if (apiRetStatus != CY_U3P_SUCCESS) {
@@ -1280,6 +1300,9 @@ static void Handle_ExtensionUnit_Rqts(void) {
   case CY_FX_UVC_XU_TLC_RW:
     EU_Rqts_tlc59116_control(bRequest);
     break;
+  case CY_FX_UVC_XU_SPLAH_RW:
+    EU_Rqts_flash_RW(bRequest);
+    break;
   default:
     sensor_err("invalid extension cmd: 0x%x\r\n", wValue);
     CyU3PUsbStall(0, CyTrue, CyFalse);
@@ -1386,9 +1409,13 @@ static void Handle_VideoStreaming_Rqts(void) {
         // V034_SensorChangeConfig();
         sensor_dbg("Res switch index: %x,Switched %d times\r\n", glProbeCtrl[3], res_switch);
         res_switch++;
-        sensor_set_power_mode(ACTIVE);
+        sensor_set_power_mode(SENSOR_ACTIVE);
         CyU3PThreadSleep(10);
-        V034_stream_start(SENSOR_ADDR_WR);
+        if (sensor_type == XPIRL2) {
+          AR0141_stream_start(AR0141_ADDR_WR);
+        } else {
+          V034_stream_start(SENSOR_ADDR_WR);
+        }
         status = kfifo_init(&IMU_kfifo, (void *)IMU_pool_buf, IMU_POOL_LEN);
         if (status)
           sensor_err("IMU kfifo init error!\r\n");
@@ -1489,7 +1516,6 @@ void Data_handle_Thread_Entry(uint32_t input) {
 
   sensor_dbg("start Data handle thread!\r\n");
   for (;;) {
-    ++count;
     if (glIsApplnActive && readyIMU == CyTrue) {
 #ifdef IMU_LOOP_SAMPLE
       uint8_t raw_IMU_data[14];
@@ -1521,10 +1547,13 @@ void Data_handle_Thread_Entry(uint32_t input) {
       }
 #endif
       CyU3PThreadSleep(1);
+      count +=100;
     } else {
       /* No active data transfer. Sleep for a small amount of time. */
+      count++;
       CyU3PThreadSleep(100);
     }
+    // infrared light control
     if (sensor_type == XPIRL && tl59116_ctrl.UpdateBit == 1) {
       if (tl59116_ctrl.dumpRegister == 1)
         tlc59116_dump_register();
@@ -1551,11 +1580,55 @@ void Data_handle_Thread_Entry(uint32_t input) {
       }
       tl59116_ctrl.UpdateBit = 0;
     }
+
+    // bus keep standby more than 1s
+    if (glSuspendEnbl && count > 1000) {
+      glWakeUpSrc      = CY_U3P_SYS_USB_BUS_ACTVTY_WAKEUP_SRC;
+      glWakeUpPol      = CY_U3P_SYS_USB_BUS_ACTVTY_WAKEUP_SRC;
+      glTriggerSuspend =  CyTrue;
+      count = 0;
+    }
+    CyFxPowerManage();
     /* Allow other ready threads to run before proceeding. */
     CyU3PThreadRelinquish();
   }
 }
 
+/*
+ * This function handle CyFX3 Power manage.
+ */
+void CyFxPowerManage(void) {
+  CyU3PReturnStatus_t apiRetStatus;
+  uint16_t            waketype = 0;
+
+  if (glTriggerSuspend) {
+    /* Enter suspend mode. */
+    glTriggerSuspend = CyFalse;
+
+    sensor_dbg("Entering Suspend Mode with Wake-Up Source %d\r\n", glWakeUpSrc);
+
+    /* Check if the wake-up parameter is valid. */
+    apiRetStatus = CyU3PSysCheckSuspendParams(glWakeUpSrc, glWakeUpPol);
+    if (apiRetStatus != CY_U3P_SUCCESS) {
+        sensor_err("Suspend Param Verify Failed %d\r\n", apiRetStatus);
+    } else {
+      apiRetStatus = CyU3PSysEnterSuspendMode(glWakeUpSrc, glWakeUpPol, &waketype);
+      if (apiRetStatus != CY_U3P_SUCCESS) {
+        sensor_dbg("Enter Suspend returned %d\r\n", apiRetStatus);
+      } else {
+        if (waketype != glWakeUpSrc) {
+          sensor_dbg("Invalid Wakeup Source %d\r\n", waketype);
+        }
+
+        /* Switch to default */
+        glWakeUpSrc = 0;
+        glWakeUpPol = 0;
+
+        sensor_dbg("Suspend Wakeup Success wakeup source %d\r\n", waketype);
+      }
+    }
+  }
+}
 /*
  * This function is called by the FX3 framework once the ThreadX RTOS has started up.
  * The application specific threads and other OS resources are created and initialized here.

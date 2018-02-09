@@ -130,22 +130,23 @@ void sendflashcmd(int fd, unsigned char cmd) {
  */
 void main(int argc, char** argv) {
   char* dev_name = "/dev/video1";
+  char* str_ptr = NULL;
   if (argc > 1) {
     dev_name = argv[1];
   }
-
+  if (argc > 2) {
+    str_ptr = argv[2];
+  }
   int v4l2_dev = open(dev_name, 0);
 
   if (v4l2_dev < 0) {
     dbg("open camera failed,err code:%d\n\r", v4l2_dev);
     exit(-1);
   }
-
-  sendflashcmd(v4l2_dev, 'E');
-  // sleep(1);
-  // sendflashcmd(v4l2_dev, 'R');
-  // sleep(1);
-  // sendflashcmd(v4l2_dev, 'W');
+  if (str_ptr == NULL)
+    sendflashcmd(v4l2_dev, 'E');
+  else if (*str_ptr == 'D')
+    sendflashcmd(v4l2_dev, 'D');
 
   close(v4l2_dev);
   return;

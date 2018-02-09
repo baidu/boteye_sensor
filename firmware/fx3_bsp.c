@@ -28,7 +28,7 @@ char *Baidu_ProductDscr[16] = {
   "Baidu_Robotics_vision_XP3",
   "Baidu_Robotics_vision_XP3S",
   "Baidu_Robotics_vision_XPIRL",
-  "Baidu_Robotics_vision_undefined_0101",
+  "Baidu_Robotics_vision_XPIRL2",
   "Baidu_Robotics_vision_undefined_0110",
   "Baidu_Robotics_vision_undefined_0111",
   "Baidu_Robotics_vision_undefined_1000",
@@ -113,8 +113,7 @@ void fx3_gpio_module_init(void) {
   gpioConfig.driveHighEn = CyTrue;
   gpioConfig.inputEn     = CyFalse;
   gpioConfig.intrMode    = CY_U3P_GPIO_NO_INTR;
-  apiRetStatus           = CyU3PGpioSetSimpleConfig(CAMERA_OE_GPIO, &gpioConfig) | \
-                           CyU3PGpioSetSimpleConfig(CAMERA_SADR_GPIO, &gpioConfig) | \
+  apiRetStatus           = CyU3PGpioSetSimpleConfig(CAMERA_SADR_GPIO, &gpioConfig) | \
                            CyU3PGpioSetSimpleConfig(CAMERA_STANDBY_GPIO, &gpioConfig) | \
                            CyU3PGpioSetSimpleConfig(SENSOR_LED_GPIO, &gpioConfig);
 
@@ -157,6 +156,22 @@ void fx3_gpio_module_init(void) {
   hardware_version_num = hadrware_version_detect();
   sensor_type = (enum SensorType)hardware_version_num;
   sensor_info("hardware_version_num: 0x%x \r\n", hardware_version_num);
+
+  gpioConfig.driveLowEn  = CyTrue;
+  gpioConfig.driveHighEn = CyTrue;
+  gpioConfig.inputEn     = CyFalse;
+  gpioConfig.intrMode    = CY_U3P_GPIO_NO_INTR;
+  if (sensor_type == XPIRL2)
+    /* AR0141 CMOS_OE ENABLE(acitve LOW) */
+    gpioConfig.outValue  = CyFalse;
+  else
+    /* MT9V024/034 CMOS_OE ENABLE(active HIGH)*/
+    gpioConfig.outValue  = CyTrue;
+  apiRetStatus = CyU3PGpioSetSimpleConfig(CAMERA_OE_GPIO, &gpioConfig);
+  if (apiRetStatus != CY_U3P_SUCCESS) {
+    sensor_err("IMU GPIO Set Config Error, Error Code = 0x%x\r\n", apiRetStatus);
+    CyFxAppErrorHandler(apiRetStatus);
+  }
 }
 
 /**
@@ -201,9 +216,13 @@ void sensor_gpio_init(void) {
     sensor_err("camera reset GPIO Set Value Error, Error Code = 0x%x\r\n", apiRetStatus);
     return;
   }
-
-  /* CMOS_OE,high,ENABLE */
-  apiRetStatus = CyU3PGpioSetValue(CAMERA_OE_GPIO, CyTrue);
+  if (sensor_type == XPIRL2) {
+    /* AR0141 CMOS_OE ENABLE(acitve LOW) */
+    apiRetStatus = CyU3PGpioSetValue(CAMERA_OE_GPIO, CyFalse);
+  } else {
+    /* MT9V024/034 CMOS_OE ENABLE(active HIGH)*/
+    apiRetStatus = CyU3PGpioSetValue(CAMERA_OE_GPIO, CyTrue);
+  }
   if (apiRetStatus != CY_U3P_SUCCESS) {
     /* Error handling */
     sensor_err("SENSOR_OE_GPIO_GPIO Set Value Error, Error Code = 0x%x\r\n", apiRetStatus);
@@ -228,7 +247,7 @@ void sensor_gpio_init(void) {
   }
 #endif
 
-  /* STANDBY,keep low */
+  /* STANDBY,keep high, into active mode */
   apiRetStatus = CyU3PGpioSetValue(CAMERA_STANDBY_GPIO, CyFalse);
   if (apiRetStatus != CY_U3P_SUCCESS) {
     /* Error handling */
@@ -250,10 +269,10 @@ void sensor_gpio_init(void) {
 
 /**
  *  @brief      sensor power mode.
- *  @param[in]  SENSOR_POWER_PMODE: active or standby.
+ *  @param[in]  SENSOR_POWER_MODE: active or standby.
  *  @return     NULL.
  */
-void sensor_set_power_mode(enum SENSOR_POWER_PMODE state) {
+void sensor_set_power_mode(enum SENSOR_POWER_MODE state) {
   CyU3PReturnStatus_t apiRetStatus;
 
   apiRetStatus = CyU3PGpioSetValue(CAMERA_STANDBY_GPIO, state);

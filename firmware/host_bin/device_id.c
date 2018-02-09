@@ -33,47 +33,29 @@
 #include <linux/uvcvideo.h>
 #include <fcntl.h>
 #include <time.h>
-#include "../include/xp_sensor_firmware_version.h"
 
-// Define camera uvc extension id
-#define CY_FX_UVC_XU_SVER_RW                                 0x0d00
-#define CY_FX_UVC_XU_HVER_RW                                 0x0f00
-
-char *Baidu_ProductDscr[16] = {
-  "Baidu_Robotics_vision_XP/XP2",
-  "Baidu_Robotics_vision_XP2S",
-  "Baidu_Robotics_vision_XP3",
-  "Baidu_Robotics_vision_XP3S",
-  "Baidu_Robotics_vision_XPIRL",
-  "Baidu_Robotics_vision_XPIRL2",
-  "Baidu_Robotics_vision_undefined_0110",
-  "Baidu_Robotics_vision_undefined_0111",
-  "Baidu_Robotics_vision_undefined_1000",
-  "Baidu_Robotics_vision_undefined_1001",
-  "Baidu_Robotics_vision_undefined_1010",
-  "Baidu_Robotics_vision_undefined_1011",
-  "Baidu_Robotics_vision_undefined_1100",
-  "Baidu_Robotics_vision_undefined_1101",
-  "Baidu_Robotics_vision_undefined_1110",
-  "Baidu_Robotics_vision_undefined_1111"
-};
+// Define the Leopard Imaging USB3.0 camera uvc extension id
+#define CY_FX_UVC_XU_FLASH_RW 0x1200
 
 // set to 1 for a bit of debug output
-#if 1
-#define __print printf
+
 #define dbg printf
-#else
-#define dbg(fmt, ...)
-#endif
+typedef unsigned char uint8_t;
 
-static  __u8 value[64] = {0};
-
+// Flash only store sensor Device ID, limit to 32 byte.
+// Flash RW len is 255
+#define FLASH_RW_LEN  255
+struct flash_struct_t {
+  uint8_t Sensor_ID[32];
+  uint8_t tmp[223];
+};
+static struct flash_struct_t value;
 struct uvc_xu_control_query xu_query = {
   .unit       = 3,  // has to be unit 3
   .selector   = 1,
   .query      = UVC_SET_CUR,
   .size       = 4,
-  .data       = value,
+  .data       = (char *)(&value),
 };
 
 /**
@@ -102,61 +84,58 @@ void error_handle() {
     err = strerror(res);
     break;
   }
-  dbg("failed to read FIRMWARE_VERSION: %s. (System code: %d) \n\r", err, res);
+  dbg("failed to read flash: %s. (System code: %d) \n\r", err, res);
   return;
 }
 
 /**
- *  @brief      update software vesion.
- *  @param[out] NULL.
+ *  @brief      read device ID from sensor flash.
+ *  @param[in]  fd: dev name.
  *  @return     NULL.
  */
-short read_soft_version(int fd) {
-  unsigned short regval = 0;
-
-  xu_query.selector = CY_FX_UVC_XU_SVER_RW >> 8;
+void read_deviceID(int fd) {
+  xu_query.selector = CY_FX_UVC_XU_FLASH_RW >> 8;
   xu_query.query = UVC_GET_CUR;
-  xu_query.size = strlen(FIRMWARE_VERSION);
+  xu_query.size = FLASH_RW_LEN;
 
-  regval = ioctl(fd, UVCIOC_CTRL_QUERY, &xu_query);
-  if (regval) {
+  if (ioctl(fd, UVCIOC_CTRL_QUERY, &xu_query) != 0) {
     error_handle();
   }
-  printf("software version: %s\r\n", value);
+  printf("read device ID: %s\n", value.Sensor_ID);
+}
+/**
+ *  @brief      write device ID to sensor flash.
+ *  @param[in]  fd: dev name.
+ *  @param[in]  str: flash control .
+ *  @return     NULL.
+ */
+void write_deviceID(int fd, unsigned char* str) {
+  xu_query.selector = CY_FX_UVC_XU_FLASH_RW >> 8;
+  xu_query.query = UVC_SET_CUR;
+  xu_query.size = FLASH_RW_LEN;
 
-  return regval;
+  // setting the read configuration
+  memcpy(&(value.Sensor_ID), str, 32);
+  if (ioctl(fd, UVCIOC_CTRL_QUERY, &xu_query) != 0) {
+    error_handle();
+  }
+  printf("write device ID: %s\n", str);
 }
 
 /**
- *  @brief      read hardware version info.
- *  @param[out] NULL.
+ *  @brief      main.
+ *  @param[in]  argc: cmd num.
+ *  @param[in]  argv: cmd info.
  *  @return     NULL.
  */
-short read_hard_version(int fd) {
-  unsigned short regval = 0;
-
-  xu_query.selector = CY_FX_UVC_XU_HVER_RW >> 8;
-  xu_query.query = UVC_GET_CUR;
-  xu_query.size = 4;
-
-  regval = ioctl(fd, UVCIOC_CTRL_QUERY, &xu_query);
-  if (regval) {
-    error_handle();
-  }
-  int hardware_version_num = value[0] << 24 | value[1] << 16 | value[2] << 8 | value[3];
-  printf("hardware version num: %d\r\n", hardware_version_num);
-  printf("hardware version: %s\r\n", Baidu_ProductDscr[hardware_version_num]);
-
-  return regval;
-}
 void main(int argc, char** argv) {
   char* dev_name = "/dev/video1";
-  char* version_type = "s";
+  char* devID_ptr = NULL;
   if (argc > 1) {
     dev_name = argv[1];
   }
   if (argc > 2) {
-    version_type = argv[2];
+    devID_ptr = argv[2];
   }
   int v4l2_dev = open(dev_name, 0);
 
@@ -164,12 +143,11 @@ void main(int argc, char** argv) {
     dbg("open camera failed,err code:%d\n\r", v4l2_dev);
     exit(-1);
   }
-  if (version_type[0] == 's')
-    read_soft_version(v4l2_dev);
-  else if (version_type[0] == 'h')
-    read_hard_version(v4l2_dev);
+  if (devID_ptr == NULL)
+    read_deviceID(v4l2_dev);
   else
-    printf("error: unknown version type request!\r\n");
+    write_deviceID(v4l2_dev, devID_ptr);
+
   close(v4l2_dev);
   return;
 }

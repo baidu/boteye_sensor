@@ -31,14 +31,39 @@
 #include "include/xp_sensor_firmware_version.h"
 #include "include/inv_icm20608.h"
 #include "include/tlc59116.h"
+#include "include/sensor_ar0141.h"
 
+  /* FLASH sector Memory Map
+  --------------------------------------
+  | Sector |    Start   |     End      |
+  --------------------------------------
+  |   0    | 0000 0000h | 0000 FFFFh   |
+  --------------------------------------
+  |   1    | 0001 0000h | 0001 FFFFh   |
+  --------------------------------------
+  |   2    | 0002 0000h | 0002 FFFFh   |
+  --------------------------------------
+  |   3    | 0003 0000h | 0003 FFFFh   |
+  --------------------------------------
+  |   4    | 0004 0000h | 0004 FFFFh   |
+  --------------------------------------
+  |   5    | 0005 0000h | 0005 FFFFh   |
+  --------------------------------------
+  |   6    | 0006 0000h | 0006 FFFFh   |
+  --------------------------------------
+  |   7    | 0007 0000h | 0007 FFFFh   |
+  --------------------------------------
+  Every sector size = 64KB, All sector is 512KB
+  Sector 0 - 3 [0 - 256KB] is boot flash.
+  Secotr 4 is Device message, include: Device ID
+  Secotr 5 - 7 is not used now.
+  */
 uint16_t glSpiPageSize = 0x100;  /* SPI Page size to be used for transfers. */
+
 /* Give a timeout value of 5s for any flash programming. */
 #define CY_FX_FLASH_PROG_TIMEOUT                (5000)
 CyU3PDmaChannel glSpiTxHandle;   /* SPI Tx channel handle */
 CyU3PDmaChannel glSpiRxHandle;   /* SPI Rx channel handle */
-// uint8_t glEp0Buf[256] __attribute__ ((aligned (32)));
-static uint8_t glEp0Buf[256];
 static CyU3PReturnStatus_t CyFxFlashProgSpiWaitForStatus(void);
 
 /* Array to hold sensor data */
@@ -164,7 +189,7 @@ void EU_Rqts_imu_burst(uint8_t bRequest) {
  *  @return     0 if successful.
  */
 void EU_Rqts_spi_flash(uint8_t bRequest) {
-  uint8_t Ep0Buffer[32];
+  uint8_t Ep0Buffer[32] = {0};
   uint16_t readCount;
   CyU3PReturnStatus_t apiRetStatus = CY_U3P_SUCCESS;
 
@@ -181,20 +206,10 @@ void EU_Rqts_spi_flash(uint8_t bRequest) {
 
     if (Ep0Buffer[0] == 'E') {
       sensor_dbg("erase flash\r\n");
-      CyFxFlashProgEraseSector(CyTrue, 0, glEp0Buf);
-      // CyU3PThreadSleep(10000);
-    }
-    if (Ep0Buffer[0] == 'R') {
-      sensor_dbg("read flash\r\n");
-      /* replace this with SPI  API to erase the flash */
-      CyU3PMemSet (glEp0Buf, 0, sizeof (glEp0Buf));
-      apiRetStatus = CyFxFlashProgSpiTransfer(1, sizeof (glEp0Buf), glEp0Buf, CyTrue);
-    }
-    if (Ep0Buffer[0] == 'W') {
-      sensor_dbg("write flash\r\n");
-      /* replace this with SPI  API to erase the flash */
-      CyU3PMemSet(glEp0Buf, 100, sizeof (glEp0Buf));
-      apiRetStatus = CyFxFlashProgSpiTransfer(1, sizeof (glEp0Buf), glEp0Buf, CyFalse);
+      CyFxFlashProgEraseSector(CyTrue, 0, Ep0Buffer);
+    } else if (Ep0Buffer[0] == 'D') {
+      sensor_dbg("Device ID erase\r\n");
+      CyFxFlashProgEraseSector(CyTrue, 4, Ep0Buffer);
     }
     break;
   case CY_FX_USB_UVC_GET_LEN_REQ:
@@ -234,8 +249,10 @@ void EU_Rqts_cam_reg(uint8_t bRequest) {
     // sensor_dbg("EU request camera reg get cur\r\n");
     Ep0Buffer[0] = read_reg_addr >> 8;
     Ep0Buffer[1] = read_reg_addr & 0xFF;
-
-    readval = V034_RegisterRead(Ep0Buffer[0], Ep0Buffer[1]);
+    if (sensor_type == XPIRL2)
+      readval = AR0141_RegisterRead(Ep0Buffer[0], Ep0Buffer[1]);
+    else
+      readval = V034_RegisterRead(Ep0Buffer[0], Ep0Buffer[1]);
 
     Ep0Buffer[2] = readval >> 8;
     Ep0Buffer[3] = readval & 0xFF;
@@ -258,7 +275,10 @@ void EU_Rqts_cam_reg(uint8_t bRequest) {
       LowAddr  = Ep0Buffer[1];
       HighData = Ep0Buffer[2];
       LowData  = Ep0Buffer[3];
-      V034_RegisterWrite(HighAddr, LowAddr, HighData, LowData);
+      if (sensor_type == XPIRL2)
+        AR0141_RegisterWrite(HighAddr, LowAddr, HighData, LowData);
+      else
+        V034_RegisterWrite(HighAddr, LowAddr, HighData, LowData);
       CyU3PThreadSleep(1);
     } else {
       read_reg_addr = Ep0Buffer[0] << 8| Ep0Buffer[1];
@@ -427,6 +447,7 @@ void EU_Rqts_tlc59116_control(uint8_t bRequest) {
 
   switch (bRequest) {
   case CY_FX_USB_UVC_GET_CUR_REQ:
+    // TODO(zhoury): add tl59116 control of XPIRL2
     if (sensor_type == XPIRL) {
       Ep0Buffer[0] = *((uint32_t *)(&tl59116_ctrl)) >> 24;
       Ep0Buffer[1] = *((uint32_t *)(&tl59116_ctrl)) >> 16;
@@ -474,6 +495,59 @@ void EU_Rqts_tlc59116_control(uint8_t bRequest) {
   }
 }
 
+/**
+ *  @brief      handle flash Read/Write action of extension unit request.
+ *  @param[out] bRequest    bRequst value of uvc.
+ *  @return     NULL.
+ */
+void EU_Rqts_flash_RW(uint8_t bRequest) {
+  uint8_t Ep0Buffer[32] = {0};
+  struct flash_struct_t flash_store;
+  uint16_t flash_len = sizeof (struct flash_struct_t);
+  uint16_t readCount;
+  CyU3PReturnStatus_t apiRetStatus = CY_U3P_SUCCESS;
+
+  switch (bRequest) {
+  case CY_FX_USB_UVC_GET_CUR_REQ:
+    sensor_dbg("read flash\r\n");
+    CyU3PMemSet ((uint8_t *)(&flash_store), 0, flash_len);
+    apiRetStatus = CyFxFlashProgSpiTransfer(DEVICE_MSG_ADDR, flash_len, (uint8_t *)(&flash_store),
+                                            CyTrue);
+    sensor_info("read device ID: %s\n", flash_store.Sensor_ID);
+    CyU3PUsbSendEP0Data(flash_len, (uint8_t *)(&flash_store));
+    break;
+  case CY_FX_USB_UVC_SET_CUR_REQ:
+    sensor_dbg("write flash\r\n");
+    apiRetStatus = CyU3PUsbGetEP0Data(flash_len, (uint8_t *)(&flash_store), &readCount);
+    if (apiRetStatus != CY_U3P_SUCCESS) {
+      sensor_err("CyU3 get Ep0 data failed\r\n");
+      CyFxAppErrorHandler(apiRetStatus);
+      break;
+    }
+    // write flash
+    sensor_info("write device ID: %s\n", flash_store.Sensor_ID);
+    CyFxFlashProgEraseSector(CyTrue, 4, Ep0Buffer);
+    apiRetStatus = CyFxFlashProgSpiTransfer(DEVICE_MSG_ADDR, flash_len, (uint8_t *)(&flash_store),
+                                            CyFalse);
+    if (apiRetStatus != CY_U3P_SUCCESS) {
+      sensor_err("Write Flash error\r\n");
+    }
+    break;
+  case CY_FX_USB_UVC_GET_LEN_REQ:
+    Ep0Buffer[0] = 255;
+    Ep0Buffer[1] = 0;
+    CyU3PUsbSendEP0Data(2, (uint8_t *)Ep0Buffer);
+    break;
+  case CY_FX_USB_UVC_GET_INFO_REQ:
+    Ep0Buffer[0] = 3;
+    CyU3PUsbSendEP0Data(1, (uint8_t *)Ep0Buffer);
+    break;
+  default:
+    sensor_err("unknown flash cmd: 0x%x\r\n", bRequest);
+    CyU3PUsbStall(0, CyTrue, CyFalse);
+    break;
+  }
+}
 /* SPI initialization for flash programmer application. */
 CyU3PReturnStatus_t CyFxFlashProgSpiInit(uint16_t pageLen) {
   CyU3PReturnStatus_t status = CY_U3P_SUCCESS;

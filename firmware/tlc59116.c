@@ -85,6 +85,9 @@ void tlc59116_set_pwm(uint16_t channel, uint8_t PWM_value) {
     if (((channel >> i) & 0x0001) == 1) {
       tlc59116_reg_write(TLC59116_PWM0 + i, PWM_value);
       tlc59116_set_channel(i,  TLC_CH_PWM);
+    } else {
+      tlc59116_reg_write(TLC59116_PWM0 + i, 0);
+      tlc59116_set_channel(i,  TLC_CH_OFF);
     }
   }
 }
@@ -112,6 +115,8 @@ void tlc59116_CH_on(uint16_t ch_value) {
   for (i = 0; i < 16; i++) {
     if (((ch_value >> i) & 0x0001) == 1)
       tlc59116_set_channel(i, TLC_CH_ON);
+    else
+      tlc59116_set_channel(i, TLC_CH_OFF);
   }
 }
 

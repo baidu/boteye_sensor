@@ -23,6 +23,13 @@
 #ifndef FIRMWARE_INCLUDE_EXTENSION_UNIT_H_
 #define FIRMWARE_INCLUDE_EXTENSION_UNIT_H_
 
+// Variable Declare
+// Flash only store sensor Device ID, limit to 32 byte.
+struct flash_struct_t {
+  uint8_t Sensor_ID[32];
+  uint8_t tmp[223];
+};
+
 /* function declaration */
 void EU_Rqts_imu_rw(uint8_t bRequest);
 void EU_Rqts_imu_burst(uint8_t bRequest);
@@ -32,6 +39,7 @@ extern void EU_Rqts_soft_version(uint8_t bRequest);
 extern void EU_Rqts_hard_version(uint8_t bRequest);
 extern void EU_Rqts_firmware_flag(uint8_t bRequest);
 extern void EU_Rqts_tlc59116_control(uint8_t bRequest);
+extern void EU_Rqts_flash_RW(uint8_t bRequest);
 extern CyU3PReturnStatus_t CyFxFlashProgEraseSector(CyBool_t isErase, uint8_t sector, uint8_t *wip);
 extern CyU3PReturnStatus_t CyFxFlashProgSpiInit(uint16_t pageLen);
 CyU3PReturnStatus_t CyFxFlashProgSpiTransfer(uint16_t  pageAddress, uint16_t  byteCount,
@@ -46,5 +54,6 @@ extern volatile char last_imu[IMU_BURST_LEN];
  * IMU_LOOP_SAMPLE, It is helpful for sensor lowpower.
  * */
 #define IMU_LOOP_SAMPLE
+#define  DEVICE_MSG_ADDR      (0x40000 / 0x100)
 
 #endif  // FIRMWARE_INCLUDE_EXTENSION_UNIT_H_

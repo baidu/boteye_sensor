@@ -25,12 +25,14 @@
  * application.
  */
 #include <cyu3spi.h>
+#include <cyu3error.h>
 #include "include/uvc.h"
 #include "include/camera_ptzcontrol.h"
 #include "include/LI_USB30_SENSORs.h"
 #include "include/xp_sensor_firmware_version.h"
 #include "include/fx3_bsp.h"
 #include "include/debug.h"
+#include "include/extension_unit.h"
 
 // Standard Device Descriptor
 const uint8_t CyFxUSBDeviceDscr[] = {
@@ -95,7 +97,7 @@ const uint8_t CyFxUSBFSConfigDscr[] = {
 };
 
 // Standard High Speed Configuration Descriptor
-const uint8_t CyFxUSBHSConfigDscr[] = {
+uint8_t CyFxUSBHSConfigDscr[] = {
     // Configuration Descriptor Type
     0x09,                           // Descriptor Size
     CY_U3P_USB_CONFIG_DESCR,        // Configuration Descriptor Type
@@ -268,8 +270,8 @@ const uint8_t CyFxUSBHSConfigDscr[] = {
     0x05,                           // Subtype: uncompressed frame I/F
     0x01,                           // Frame Descriptor Index
     0x03,                           // Still image capture method 1 supported, fixed frame rate
-    0x80, 0x02,                     // Width in pixel: 320-QVGA
-    0xE0, 0x01,                     // Height in pixel 240-QVGA
+    0x80, 0x02,                     // Width in pixel: 640-VGA
+    0xE0, 0x01,                     // Height in pixel 480-VGA
     0x00, 0x50, 0x97, 0x31,         // Min bit rate bits/s. Not specified, taken from MJPEG
     0x00, 0x50, 0x97, 0x31,         // Max bit rate bits/s. Not specified, taken from MJPEG
     0x00, 0x60, 0x09, 0x00,         // Maximum video or still frame size in bytes(Deprecated)
@@ -325,7 +327,7 @@ const uint8_t CyFxUSBBOSDscr[] = {
 };
 
 // Super Speed Configuration Descriptor
-const uint8_t CyFxUSBSSConfigDscr[] = {
+uint8_t CyFxUSBSSConfigDscr[] = {
     // Configuration Descriptor Type
     0x09,                           // Descriptor Size
     CY_U3P_USB_CONFIG_DESCR,        // Configuration Descriptor Type
@@ -590,24 +592,44 @@ uint8_t CyFxUSBSerialNumberDscr[256] = {
 };
 
 /**
- *  @brief      update firmware vesion to Serial Number Descriptor.
+ *  @brief      update firmware vesion and device ID to Serial Number Descriptor.
  *  @param[out] NULL.
  *  @return     NULL.
  */
-void update_soft_version_dscr(void) {
+void update_serial_number_dscr(void) {
   int i = 0;
   char *version_info = FIRMWARE_VERSION;
+  const char *error_info = "device ID NULL or too long";
   int version_len = strlen(version_info);
+  struct flash_struct_t flash_store;
+  uint16_t flash_len = sizeof (struct flash_struct_t);
+  CyU3PReturnStatus_t apiRetStatus = CY_U3P_SUCCESS;
 
-  if (version_len > (256 - 2) >> 2)
-    version_len = (256 - 2) >> 2;
-
+  CyU3PMemSet((uint8_t *)(&flash_store), 0, flash_len);
+  apiRetStatus = CyFxFlashProgSpiTransfer(DEVICE_MSG_ADDR, flash_len, (uint8_t *)(&flash_store),
+                                            CyTrue);
+  if (apiRetStatus != CY_U3P_SUCCESS) {
+    sensor_err("read Flash error\r\n");
+  }
+  uint16_t deviceID_len = strlen((char *)(&(flash_store.Sensor_ID)));
   memset(CyFxUSBSerialNumberDscr, 0, sizeof(CyFxUSBSerialNumberDscr));
-  CyFxUSBSerialNumberDscr[0] = 2 + version_len * 2;
   CyFxUSBSerialNumberDscr[1] = CY_U3P_USB_STRING_DESCR;
 
   for (i = 0; i < version_len; i++) {
     CyFxUSBSerialNumberDscr[2 + i * 2] = *(version_info + i);
+  }
+  CyFxUSBSerialNumberDscr[2 + version_len * 2] = '-';
+  if ((version_len + deviceID_len + 1) <= (256 - 2) >> 2) {
+    CyFxUSBSerialNumberDscr[0] = 2 + (version_len + deviceID_len + 1) * 2;
+    for (i = 0; i < deviceID_len; i++) {
+      CyFxUSBSerialNumberDscr[2 + version_len * 2 + 2 + i * 2] = flash_store.Sensor_ID[i];
+    }
+  } else {
+    CyFxUSBSerialNumberDscr[0] = 2 + (version_len + strlen(error_info) + 1) * 2;
+    CyFxUSBSerialNumberDscr[1] = CY_U3P_USB_STRING_DESCR;
+    for (i = 0; i < strlen(error_info); i++) {
+      CyFxUSBSerialNumberDscr[2 + version_len * 2 + 2 + i * 2] = *(error_info + i);
+    }
   }
 }
 
@@ -632,4 +654,50 @@ void update_hard_version_dscr(void) {
   for (i = 0; i < version_len; i++) {
     CyFxUSBProductDscr[2 + i * 2] = *(hard_version_info + i);
   }
+}
+/**
+ *  @brief      update sensor Resolution to usb2.0 Configuration Descriptor.
+ *  @param[out] NULL.
+ *  @return     NULL.
+ */
+void update_HS_config_dscr(enum SensorType sensor_type) {
+  uint16_t width = 0;
+  uint16_t height = 0;
+  if (sensor_type == XPIRL2) {
+    width = 1280;
+    height = 720;
+  } else {
+    width = 640;
+    height = 480;
+  }
+  CyFxUSBHSConfigDscr[173] = width & 0xFF;
+  CyFxUSBHSConfigDscr[174] = width >> 8;
+  CyFxUSBHSConfigDscr[175] = height & 0xFF;
+  CyFxUSBHSConfigDscr[176] = height >> 8;
+  sensor_dbg("HS config width: %d height: %d \r\n",
+             CyFxUSBHSConfigDscr[173] | CyFxUSBHSConfigDscr[174] << 8,
+             CyFxUSBHSConfigDscr[175] | CyFxUSBHSConfigDscr[176] << 8);
+}
+/**
+ *  @brief      update sensor Resolution to usb3.0 Configuration Descriptor.
+ *  @param[out] NULL.
+ *  @return     NULL.
+ */
+void update_SS_config_dscr(enum SensorType sensor_type) {
+  uint16_t width = 0;
+  uint16_t height = 0;
+  if (sensor_type == XPIRL2) {
+    width = 1280;
+    height = 720;
+  } else {
+    width = 640;
+    height = 480;
+  }
+  CyFxUSBSSConfigDscr[178] = width & 0xFF;
+  CyFxUSBSSConfigDscr[179] = width >> 8;
+  CyFxUSBSSConfigDscr[180] = height & 0xFF;
+  CyFxUSBSSConfigDscr[181] = height >> 8;
+  sensor_dbg("SS config width: %d height: %d \r\n",
+             CyFxUSBSSConfigDscr[178] | CyFxUSBSSConfigDscr[179] << 8,
+             CyFxUSBSSConfigDscr[180] | CyFxUSBSSConfigDscr[181] << 8);
 }

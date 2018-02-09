@@ -41,6 +41,8 @@ extern uint8_t CyFxUSBProductDscr[];                    /* Product string descri
 extern uint8_t CyFxUSBSerialNumberDscr[];               /* Product string descriptor. */
 
 /* function declaration */
-extern void update_soft_version_dscr(void);
+extern void update_serial_number_dscr(void);
 extern void update_hard_version_dscr(void);
+extern void update_HS_config_dscr(enum SensorType sensor_type);
+extern void update_SS_config_dscr(enum SensorType sensor_type);
 #endif  // FIRMWARE_INCLUDE_CYFXUVCDSCR_H_
