@@ -27,7 +27,8 @@ enum  StateMode {
 #define TLC59116_ADDR             0xC0
 #define TLC59116_SWRST_ADDR       0b1101011
 #define TLC59116_DEFAULT_PWM      120          // 256
-#define TLC59116_DEFAULT_OPEN_CH  0x0707       // open 0,1,2 8,9,10 channel
+#define XPIRL_DEFAULT_OPEN_CH     0x0707       // open 0,1,2 8,9,10 channel
+#define XPIRL2_DEFAULT_OPEN_CH    0x39C0       // open 6,7,8 11,12,13 channel
 #define TLC59116_DEFAULT_CLOSE_CH 0xFFFF       // close all channel
 // register map
 #define TLC59116_Mode1      0x00

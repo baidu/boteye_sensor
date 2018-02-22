@@ -1,5 +1,5 @@
 ## boteye_sensor ##
-This repo contains hardware and firmware of Baidu boteye sensor.  
+This repo contains hardware and firmware of Baidu boteye sensor.
 **If you purchase the [hardware from Kinco Automation](http://www.kinco.cn/solution/detail?id=36&type=all)(a third party manufacturer), which is already loaded with the latest firmware, you can skip the following steps.**
 
 ## Hardware Introduction
@@ -86,7 +86,7 @@ Firmware supports three hardware versions: `XP`, `XP2`, and `XP3`.
 
   ```bash
   export CYUSB_ROOT=~/Development/sensor/cyusb_linux_1.0.4/
-  export LD_LIBRARY_PATH=/user/local/lib/
+  export LD_LIBRARY_PATH=/usr/local/lib/
   source ~/.bashrc
   ```
 ## Image Download ##

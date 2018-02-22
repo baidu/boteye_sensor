@@ -25,6 +25,7 @@
 #include "include/sensor_v034_raw.h"
 #include "include/fx3_bsp.h"
 #include "include/debug.h"
+#include "include/uvc.h"
 /*****************************************************************************
 **                               Global data & Function declaration
 ******************************************************************************/
@@ -427,6 +428,41 @@ void V034_sensor_init(void) {
   sensor_dbg("V034_sensor_init done \r\n");
 }
 
+void update_v034_flip_left(void) {
+  switch (sensor_type) {
+  case XP_XP2:
+  case XPIRL2:
+    MT9V034_Parallel[(0x0D -1) * 2 + 1] = 0x0300;
+    break;
+  case XP2s:
+  case XP3:
+  case XP3s:
+  case XPIRL:
+    MT9V034_Parallel[(0x0D -1) * 2 + 1] = 0x0330;
+    break;
+  default:
+    sensor_err("sensor type error\r\n");
+    break;
+  }
+}
+
+void update_v034_flip_right(void) {
+  switch (sensor_type) {
+  case XP_XP2:
+  case XPIRL2:
+  case XP2s:
+  case XP3:
+    MT9V034_Parallel[(0x0D -1) * 2 + 1] = 0x0300;
+    break;
+  case XP3s:
+  case XPIRL:
+    MT9V034_Parallel[(0x0D -1) * 2 + 1] = 0x0330;
+    break;
+  default:
+    sensor_err("sensor type error\r\n");
+    break;
+  }
+}
 static void V034_ChipID_Check(uint8_t SlaveAddr) {
   uint16_t ChipID;
 
@@ -445,7 +481,7 @@ void DRV_imgsSetRegs(void) {
   sensor_dbg("init Left image sensor regitster.\r\n");
   V034_soft_reset(L_SENSOR_ADDR_WR);
   V034_ChipID_Check(L_SENSOR_ADDR_RD);
-
+  update_v034_flip_left();
   for (j = 0; j < sizeof(MT9V034_Parallel) / sizeof(uint16_t); j = j + 2) {
     AddrH  = (MT9V034_Parallel[j] >> 8) & 0xff;
     AddrL  = (MT9V034_Parallel[j]) & 0xff;
@@ -459,7 +495,7 @@ void DRV_imgsSetRegs(void) {
   V034_soft_reset(R_SENSOR_ADDR_WR);
   V034_ChipID_Check(R_SENSOR_ADDR_RD);
   sensor_dbg("init Right image sensor regitster.\r\n");
-
+  update_v034_flip_right();
   for (j = 0; j < sizeof(MT9V034_Parallel) / sizeof(uint16_t); j = j + 2) {
     AddrH  = (MT9V034_Parallel[j] >> 8) & 0xff;
     AddrL  = (MT9V034_Parallel[j]) & 0xff;

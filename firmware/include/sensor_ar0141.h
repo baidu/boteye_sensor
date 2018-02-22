@@ -26,14 +26,6 @@
 #define R_AR0141_ADDR_WR  0x30
 #define R_AR0141_ADDR_RD  0x31
 
-// AR0141 register address map
-#define GREEN1_GAIN       0x3056
-#define BLUE_GAIN         0x3058
-#define RED_GAIN          0x305A
-#define GREEN2_GAIN       0x305C
-#define GLOBAL_GAIN       0x305E
-#define ANALOG_GAIN       0x3060
-
 extern CyU3PReturnStatus_t AR0141_RegisterWrite(uint8_t HighAddr, uint8_t LowAddr,
                                                 uint8_t HighData, uint8_t LowData);
 extern uint16_t AR0141_RegisterRead(uint8_t HighAddr, uint8_t LowAddr);

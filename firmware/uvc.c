@@ -687,7 +687,7 @@ static void CyFxUVCApplnInit(void) {
   // MT9V024/034 AR0141's standby mode(ACTIVE HIGH)
   sensor_set_power_mode(SENSOR_STANDBY);
   /* init tlc59116 */
-  if (sensor_type == XPIRL || sensor_type == XPIRL2) {
+  if (sensor_type == XPIRL) {
     tlc59116_init();
   }
   /* USB initialization. */
@@ -943,10 +943,13 @@ void UVC_AppThread_Entry(uint32_t input) {
         sensor_dbg("got CY_FX_UVC_STREAM_ABORT_EVENT \r\n");
         if (sensor_type == XPIRL2) {
           AR0141_stream_stop(AR0141_ADDR_WR);
+          tlc59116_off(0xFFFF);
+          // TODO(zhoury): use LEDOUT of sensor is better for Power Manage
+          LIMA_LED_OFF();
         } else {
           V034_stream_stop(SENSOR_ADDR_WR);
+          tlc59116_off(0xFFFF);
         }
-        tlc59116_off(0xFFFF);
         CyU3PThreadSleep(10);
         sensor_set_power_mode(SENSOR_STANDBY);
         if (!clearFeatureRqtReceived) {
@@ -1412,6 +1415,7 @@ static void Handle_VideoStreaming_Rqts(void) {
         sensor_set_power_mode(SENSOR_ACTIVE);
         CyU3PThreadSleep(10);
         if (sensor_type == XPIRL2) {
+          LIMA_LED_ON();
           AR0141_stream_start(AR0141_ADDR_WR);
         } else {
           V034_stream_start(SENSOR_ADDR_WR);
@@ -1554,7 +1558,7 @@ void Data_handle_Thread_Entry(uint32_t input) {
       CyU3PThreadSleep(100);
     }
     // infrared light control
-    if (sensor_type == XPIRL && tl59116_ctrl.UpdateBit == 1) {
+    if ((sensor_type == XPIRL || sensor_type == XPIRL2) && tl59116_ctrl.UpdateBit == 1) {
       if (tl59116_ctrl.dumpRegister == 1)
         tlc59116_dump_register();
       if (tl59116_ctrl.SetCH_on_mode == 0 && tl59116_ctrl.SetCH_pwm_mode == 0) {
@@ -1564,14 +1568,18 @@ void Data_handle_Thread_Entry(uint32_t input) {
         tlc59116_off(tl59116_ctrl.channel_value);
       } else if (tl59116_ctrl.SetCH_on_mode == 1 && tl59116_ctrl.SetCH_pwm_mode == 0) {
         // CHECK channel_value if is 0, will close default open channel
-        if (tl59116_ctrl.channel_value == 0 )
-          tl59116_ctrl.channel_value = TLC59116_DEFAULT_OPEN_CH;
+        if (tl59116_ctrl.channel_value == 0) {
+          tl59116_ctrl.channel_value = (sensor_type == XPIRL ?
+                                        XPIRL_DEFAULT_OPEN_CH : XPIRL2_DEFAULT_OPEN_CH);
+        }
         sensor_info("tl59116: on mode, channel:0x%x\r\n", tl59116_ctrl.channel_value);
         tlc59116_CH_on(tl59116_ctrl.channel_value);
       } else if (tl59116_ctrl.SetCH_on_mode == 0 && tl59116_ctrl.SetCH_pwm_mode == 1) {
         // CHECK channel_value if is 0, will close default open channel
-        if (tl59116_ctrl.channel_value == 0 )
-          tl59116_ctrl.channel_value = TLC59116_DEFAULT_OPEN_CH;
+        if (tl59116_ctrl.channel_value == 0) {
+          tl59116_ctrl.channel_value = (sensor_type == XPIRL ?
+                                        XPIRL_DEFAULT_OPEN_CH : XPIRL2_DEFAULT_OPEN_CH);
+        }
         sensor_info("tl59116: pwm mode, channel:0x%x pwm_value:%d\r\n", tl59116_ctrl.channel_value,
                                                                  tl59116_ctrl.pwm_value);
         tlc59116_set_pwm(tl59116_ctrl.channel_value, tl59116_ctrl.pwm_value);
@@ -1587,6 +1595,8 @@ void Data_handle_Thread_Entry(uint32_t input) {
       glWakeUpPol      = CY_U3P_SYS_USB_BUS_ACTVTY_WAKEUP_SRC;
       glTriggerSuspend =  CyTrue;
       count = 0;
+      if (sensor_type == XPIRL2)
+        tlc59116_power_OFF();
     }
     CyFxPowerManage();
     /* Allow other ready threads to run before proceeding. */
@@ -1625,6 +1635,11 @@ void CyFxPowerManage(void) {
         glWakeUpPol = 0;
 
         sensor_dbg("Suspend Wakeup Success wakeup source %d\r\n", waketype);
+      }
+      if (sensor_type == XPIRL2) {
+        tlc59116_power_ON();
+        CyU3PThreadSleep(10);
+        tlc59116_init();
       }
     }
   }

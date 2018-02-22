@@ -43,6 +43,10 @@
 #define HARD_VERSION_A1        43  // DQ26
 #define HARD_VERSION_A0        44  // DQ27
 
+// LIMA LED control pin
+#define LIMA_CATL1_GPIO       26  // CTL[9]
+#define IR_CTL_GPIO           27  // CTL[10]
+
 #define SINGLE_V034_WITH_DIFF_ADDR
 
 /* LED blink type */
@@ -72,4 +76,10 @@ extern void v034_set_unified_addr(void);
 extern void v034_power_on(void);
 extern void v034_power_off(void);
 extern void sensor_set_power_mode(enum SENSOR_POWER_MODE state);
+
+extern void fx3_LIMA_GPIO_init(void);
+extern void tlc59116_power_ON(void);
+extern void tlc59116_power_OFF(void);
+extern void LIMA_LED_ON(void);
+extern void LIMA_LED_OFF(void);
 #endif  // FIRMWARE_INCLUDE_FX3_BSP_H_

@@ -161,17 +161,85 @@ void fx3_gpio_module_init(void) {
   gpioConfig.driveHighEn = CyTrue;
   gpioConfig.inputEn     = CyFalse;
   gpioConfig.intrMode    = CY_U3P_GPIO_NO_INTR;
-  if (sensor_type == XPIRL2)
+  if (sensor_type == XPIRL2) {
     /* AR0141 CMOS_OE ENABLE(acitve LOW) */
     gpioConfig.outValue  = CyFalse;
-  else
+  } else {
     /* MT9V024/034 CMOS_OE ENABLE(active HIGH)*/
     gpioConfig.outValue  = CyTrue;
+  }
   apiRetStatus = CyU3PGpioSetSimpleConfig(CAMERA_OE_GPIO, &gpioConfig);
   if (apiRetStatus != CY_U3P_SUCCESS) {
     sensor_err("IMU GPIO Set Config Error, Error Code = 0x%x\r\n", apiRetStatus);
     CyFxAppErrorHandler(apiRetStatus);
   }
+  if (sensor_type == XPIRL2)
+    fx3_LIMA_GPIO_init();
+}
+/**
+ *  @brief      FX3 LIMA GPIO Init For XPIRL2.
+ *  @param[]    NULL.
+ *  @return     NULL.
+ */
+void fx3_LIMA_GPIO_init(void) {
+  CyU3PGpioSimpleConfig_t      gpioConfig;
+  CyU3PReturnStatus_t          apiRetStatus;
+
+  apiRetStatus = CyU3PDeviceGpioOverride(LIMA_CATL1_GPIO, CyTrue) | \
+                 CyU3PDeviceGpioOverride(IR_CTL_GPIO, CyTrue);
+  if (apiRetStatus != CY_U3P_SUCCESS) {
+    sensor_err("GPIO Override failed, Error Code = 0x%x\r\n", apiRetStatus);
+    CyFxAppErrorHandler(apiRetStatus);
+  }
+  /* init output GPIO Low level after init */
+  gpioConfig.outValue    = CyFalse;
+  gpioConfig.driveLowEn  = CyTrue;
+  gpioConfig.driveHighEn = CyTrue;
+  gpioConfig.inputEn     = CyFalse;
+  gpioConfig.intrMode    = CY_U3P_GPIO_NO_INTR;
+  apiRetStatus           = CyU3PGpioSetSimpleConfig(LIMA_CATL1_GPIO, &gpioConfig) | \
+                           CyU3PGpioSetSimpleConfig(IR_CTL_GPIO, &gpioConfig);
+
+  if (apiRetStatus != CY_U3P_SUCCESS) {
+    sensor_err("Camera GPIO Set Config Error, Error Code = 0x%x\r\n", apiRetStatus);
+    CyFxAppErrorHandler(apiRetStatus);
+  }
+}
+
+/**
+ *  @brief      TLC59116 power ON for XPIRL2.
+ *  @param[]    NULL.
+ *  @return     NULL.
+ */
+void tlc59116_power_ON(void) {
+  CyU3PGpioSetValue(IR_CTL_GPIO, CyTrue);
+}
+
+/**
+ *  @brief      TLC59116 power OFF for XPIRL2.
+ *  @param[]    NULL.
+ *  @return     NULL.
+ */
+void tlc59116_power_OFF(void) {
+  CyU3PGpioSetValue(IR_CTL_GPIO, CyFalse);
+}
+
+/**
+ *  @brief      LIMA_LED_ON for XPIRL2.
+ *  @param[]    NULL.
+ *  @return     NULL.
+ */
+void LIMA_LED_ON(void) {
+  CyU3PGpioSetValue(LIMA_CATL1_GPIO, CyTrue);
+}
+
+/**
+ *  @brief      LIMA_LED_OFF for XPIRL2.
+ *  @param[]    NULL.
+ *  @return     NULL.
+ */
+void LIMA_LED_OFF(void) {
+  CyU3PGpioSetValue(LIMA_CATL1_GPIO, CyFalse);
 }
 
 /**

@@ -26,6 +26,49 @@
 #include "include/sensor_v034_raw.h"
 #include "include/debug.h"
 #include "include/fx3_bsp.h"
+// AR0141 register address map
+// Frame rate Fps = 1/Tframe
+// Tframe = 1 /(CLK_PIX) * [frame_length_lines * line_length_pck + extra_delay]
+// Minimumframe_length_lines = (y_addr_end - y_addr_start + 1) /
+//                             ((y_odd_inc + 1) / 2) + min_vertical_blanking
+// TODO(zhoury): max frame rate is 23Hz at 27MHz
+#define CLK_PIX            27000000
+#define FRAME_FPS          25
+#define FRAME_LENGTH_LINES 750    // defalut: 750(0x02EE)  0x00E2=226 0x05DC=1500
+#define EXTRA_DELAY        0
+#define LINE_LENGTH_PCK    1550   // ((CLK_PIX / FRAME_FPS -  EXTRA_DELAY)/ FRAME_LENGTH_LINES)
+
+// Exposure/Integration register
+#define COARSE_INTEGRATION_TIME       500  // default:16(0X0010)
+#define FINE_INTEGRATION_TIME         0       // default:0
+// #define FLASH_CONTROL         0x0138
+// #define FLASH_CONTROL         0x0108
+#define FLASH_CONTROL         0x0108
+#define FLASH_PERIODS         0x0F00
+#define GRR_CONTROL1          0x0081
+// Gain relative register
+// The digital channel gain format is xxxx.yyyyyyy where
+// xxxx refers integer gain of 1 -15
+// yyyyyyy refer to fractional gain from 0/128 to 127/128
+#define GREEN1_INTEGER        1
+#define GREEN1_FRACTIONAL     0
+#define GREEN1_GAIN           (GREEN1_INTEGER << 7 | GREEN1_FRACTIONAL)  // default:128(0X80)
+#define BLUE_INTEGER          1
+#define BLUE_FRACTIONAL       56
+#define BLUE_GAIN             (BLUE_INTEGER << 7 | BLUE_FRACTIONAL)      // default:128(0X80)
+#define RED_INTEGER           1
+#define RED_FRACTIONAL        56
+#define RED_GAIN              (RED_INTEGER << 7 | RED_FRACTIONAL)        // default:128(0X80)
+#define GREEN2_INTEGER        1
+#define GREEN2_FRACTIONAL     0
+#define GREEN2_GAIN           (GREEN2_INTEGER << 7 | GREEN2_FRACTIONAL)  // default:128(0X80)
+#define GLOBAL_INTEGER        1
+#define GLOBAL_FRACTIONAL     0
+#define GLOBAL_GAIN           (GLOBAL_INTEGER << 7 | GLOBAL_FRACTIONAL)
+// 2^coarse_gain * (1 + fine_gain/16)
+#define COARSE_GAIN           0
+#define FINE_GAIN             14
+#define ANALOG_GAIN           (COARSE_GAIN << 4 | FINE_GAIN)
 
 #define AR0141_WINDOW_X_MAX    1344
 #define AR0141_WINDOW_Y_MAX    848
@@ -262,12 +305,23 @@ uint16_t AR0141_Parallel_init[] = {
   0x3004, AR0141_X_ADDR_START,  // X_ADDR_START  default: 18(0x0012)
   0x3006, AR0141_Y_ADDR_END,    // Y_ADDR_END    defalut: 791(0x0317)  0x01DF=479 0x02CF=719
   0x3008, AR0141_X_ADDR_END,    // X_ADDR_END    defalut: 1305(0x0519) 0x027F=639 0x04FF=1279
-  0x300A, 0x02EE,  // FRAME_LENGTH_LINES      defalut: 750(0x02EE)  0x00E2=226 0x05DC=1500
-  0x300C, 0x0672,  // LINE_LENGTH_PCK = 1650
-  0x3012, 0x0272,  // COARSE_INTEGRATION_TIME = 45
+  0x300A, FRAME_LENGTH_LINES,  // FRAME_LENGTH_LINES
+  0x300C, LINE_LENGTH_PCK,  // LINE_LENGTH_PCK
+  0x3042, EXTRA_DELAY,  // EXTRA_DELAY
+
+  0x3012, COARSE_INTEGRATION_TIME,  // COARSE_INTEGRATION_TIME
+  0x3014, FINE_INTEGRATION_TIME,   // FINE_INTEGRATION_TIME
+  0x3046, FLASH_CONTROL,  // FLASH_CONTROL
+  // 0x3048, FLASH_PERIODS,  // FLASH_PERIODS
+  0x30DA, 0x00FF,  // FLASH_PERIODS
   // disable embedded data
+  0x3056, GREEN1_GAIN,  // GREEN1_GAIN   defalut: 128(0x0080)
+  0x3058, BLUE_GAIN,    // BLUE_GAIN     defalut: 128(0x0080)
+  0x305A, RED_GAIN,     // RED_GAIN      defalut: 128(0x0080)
+  0x305C, GREEN2_GAIN,  // GREEN2_GAIN   defalut: 128(0x0080)
+  // 0x305E, GLOBAL_GAIN,  // GLOBAL_GAIN   defalut: 128(0x0080)
+  0x3060, ANALOG_GAIN,  // ANALOG_GAIN   defalut: 0(0x0000)
   0x3064, 0x1802,  // SMIA_TEST
-  0x305E, 0x01FA,  // GLOBAL_GAIN   defalut: 128(0x0080)
   0x30A2, 0x0001,  // X_ODD_INC = 1
   0x30A6, 0x0001,  // Y_ODD_INC = 1
   0x3082, 0x000D,  // OPERATION_MODE_CTRL = 1
@@ -282,6 +336,7 @@ uint16_t AR0141_Parallel_init[] = {
   0x30AE, 0x0001,  // X_ODD_INC_CB = 1
   0x30A8, 0x0001,  // Y_ODD_INC_CB = 1
   0x3040, 0x0000,  // READ_MODE = 0
+  0x30CE, GRR_CONTROL1,  // GRR_CONTROL1
   0x318E, 0x0000,  // HDR_MC_CTRL3 = 0
   0x3100, 0x0004,
   0x301A, 0x10D8   // RESET_REGISTER = 4316

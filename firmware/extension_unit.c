@@ -448,7 +448,7 @@ void EU_Rqts_tlc59116_control(uint8_t bRequest) {
   switch (bRequest) {
   case CY_FX_USB_UVC_GET_CUR_REQ:
     // TODO(zhoury): add tl59116 control of XPIRL2
-    if (sensor_type == XPIRL) {
+    if (sensor_type == XPIRL || sensor_type == XPIRL2) {
       Ep0Buffer[0] = *((uint32_t *)(&tl59116_ctrl)) >> 24;
       Ep0Buffer[1] = *((uint32_t *)(&tl59116_ctrl)) >> 16;
       Ep0Buffer[2] = *((uint32_t *)(&tl59116_ctrl)) >> 8;
@@ -465,7 +465,7 @@ void EU_Rqts_tlc59116_control(uint8_t bRequest) {
       sensor_err("CyU3 get Ep0 data failed\r\n");
       CyFxAppErrorHandler(apiRetStatus);
     }
-    if (sensor_type == XPIRL) {
+    if (sensor_type == XPIRL || sensor_type == XPIRL2) {
       if ((Ep0Buffer[3] & 0x80) == 0)
         Ep0Buffer[3] = Ep0Buffer[3] | 0x80;
       uint32_t tl59116_ctrl_tmp = Ep0Buffer[0] << 24 | Ep0Buffer[1] << 16 |

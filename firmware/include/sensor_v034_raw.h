@@ -63,6 +63,8 @@ void V034_stream_start(uint8_t SlaveAddr);
 void V034_stream_stop(uint8_t SlaveAddr);
 void dump_v034_registers(uint8_t SlaveAddr);
 uint16_t V034_RegisterRead(uint8_t HighAddr, uint8_t LowAddr);
+void update_v034_flip_left(void);
+void update_v034_flip_right(void);
 
 /* Function    : V034_SensorGetBrightness
    Description : Get the current brightness setting from the MT9M114 sensor.
