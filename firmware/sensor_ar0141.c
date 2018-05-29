@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright 2017 Baidu Robotic Vision Authors. All Rights Reserved.
+ * Copyright 2017-2018 Baidu Robotic Vision Authors. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,15 +36,14 @@
 #define FRAME_FPS          25
 #define FRAME_LENGTH_LINES 750    // defalut: 750(0x02EE)  0x00E2=226 0x05DC=1500
 #define EXTRA_DELAY        0
-#define LINE_LENGTH_PCK    1550   // ((CLK_PIX / FRAME_FPS -  EXTRA_DELAY)/ FRAME_LENGTH_LINES)
+#define LINE_LENGTH_PCK    ((CLK_PIX / FRAME_FPS -  EXTRA_DELAY)/ FRAME_LENGTH_LINES)
 
 // Exposure/Integration register
-#define COARSE_INTEGRATION_TIME       500  // default:16(0X0010)
+#define COARSE_INTEGRATION_TIME       300  // default:16(0X0010)
 #define FINE_INTEGRATION_TIME         0       // default:0
-// #define FLASH_CONTROL         0x0138
-// #define FLASH_CONTROL         0x0108
-#define FLASH_CONTROL         0x0108
-#define FLASH_PERIODS         0x0F00
+
+#define FLASH_CONTROL         0x0038
+#define FLASH_PERIODS         0xFFFF
 #define GRR_CONTROL1          0x0081
 // Gain relative register
 // The digital channel gain format is xxxx.yyyyyyy where
@@ -312,7 +311,7 @@ uint16_t AR0141_Parallel_init[] = {
   0x3012, COARSE_INTEGRATION_TIME,  // COARSE_INTEGRATION_TIME
   0x3014, FINE_INTEGRATION_TIME,   // FINE_INTEGRATION_TIME
   0x3046, FLASH_CONTROL,  // FLASH_CONTROL
-  // 0x3048, FLASH_PERIODS,  // FLASH_PERIODS
+  0x3048, FLASH_PERIODS,  // FLASH_PERIODS
   0x30DA, 0x00FF,  // FLASH_PERIODS
   // disable embedded data
   0x3056, GREEN1_GAIN,  // GREEN1_GAIN   defalut: 128(0x0080)
@@ -336,7 +335,7 @@ uint16_t AR0141_Parallel_init[] = {
   0x30AE, 0x0001,  // X_ODD_INC_CB = 1
   0x30A8, 0x0001,  // Y_ODD_INC_CB = 1
   0x3040, 0x0000,  // READ_MODE = 0
-  0x30CE, GRR_CONTROL1,  // GRR_CONTROL1
+  // 0x30CE, GRR_CONTROL1,  // GRR_CONTROL1
   0x318E, 0x0000,  // HDR_MC_CTRL3 = 0
   0x3100, 0x0004,
   0x301A, 0x10D8   // RESET_REGISTER = 4316
@@ -395,14 +394,14 @@ CyU3PReturnStatus_t AR0141_SensorWrite2B(uint8_t SlaveAddr, uint8_t HighAddr,
 
 CyU3PReturnStatus_t AR0141_RegisterWrite(uint8_t HighAddr, uint8_t LowAddr,
   uint8_t HighData, uint8_t LowData) {
-  return AR0141_SensorWrite2B(SENSOR_ADDR_WR, HighAddr, LowAddr, HighData, LowData);
+  return AR0141_SensorWrite2B(AR0141_ADDR_WR, HighAddr, LowAddr, HighData, LowData);
 }
 
 uint16_t AR0141_RegisterRead(uint8_t HighAddr, uint8_t LowAddr) {
   uint8_t buf[2];
   int16_t tmp;
 
-  AR0141_SensorRead2B(SENSOR_ADDR_RD, HighAddr, LowAddr, buf);
+  AR0141_SensorRead2B(AR0141_ADDR_RD, HighAddr, LowAddr, buf);
   tmp = (buf[0] << 8) | buf[1];
 
   return (uint16_t)tmp;
@@ -507,7 +506,7 @@ void AR0141_SetRegs(void) {
 
     AR0141_SensorWrite2B(L_AR0141_ADDR_WR, AddrH, AddrL, ValH, ValL);
   }
-  dump_AR0141_registers(L_AR0141_ADDR_RD);
+  // dump_AR0141_registers(L_AR0141_ADDR_RD);
 
   /* init Right image sensor*/
   sensor_dbg("init Right image sensor regitster.\r\n");
@@ -533,7 +532,7 @@ void AR0141_SetRegs(void) {
 
     AR0141_SensorWrite2B(R_AR0141_ADDR_WR, AddrH, AddrL, ValH, ValL);
   }
-  dump_AR0141_registers(R_AR0141_ADDR_RD);
+  // dump_AR0141_registers(R_AR0141_ADDR_RD);
   /* reset two hard address to one addr, so we use SENSOR_ADDR_WR and SENSOR_ADDR_RD later  */
   v034_set_unified_addr();
 }
@@ -552,7 +551,7 @@ void AR0141_stream_start(uint8_t SlaveAddr) {
 
 void AR0141_stream_stop(uint8_t SlaveAddr) {
   uint16_t Stream_Stop_Addr  = 0x301A;
-  uint16_t Stream_Stop_Value = 0x10DC;
+  uint16_t Stream_Stop_Value = 0x10D8;
   BYTE AddrH, AddrL, ValH, ValL;
 
   AddrH  = (Stream_Stop_Addr >> 8) & 0xff;
@@ -561,6 +560,7 @@ void AR0141_stream_stop(uint8_t SlaveAddr) {
   ValL   = (Stream_Stop_Value) & 0xff;
   AR0141_SensorWrite2B(SlaveAddr, AddrH, AddrL, ValH, ValL);
 }
+
 void AR0141_sensor_init(void) {
   sensor_dbg("sensor AR0141 register init \r\n");
   AR0141_SetRegs();

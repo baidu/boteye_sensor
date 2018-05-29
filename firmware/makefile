@@ -31,6 +31,7 @@ SOURCE= uvc.c	sensor_v034_raw.c camera_ptzcontrol.c\
 	fx3_bsp.c\
 	kfifo.c\
 	tlc59116.c\
+	tlc59108.c\
 	sensor_ar0141.c\
 	cyfxtx.c
 

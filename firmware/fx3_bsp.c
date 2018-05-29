@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright 2017 Baidu Robotic Vision Authors. All Rights Reserved.
+ * Copyright 2017-2018 Baidu Robotic Vision Authors. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 #include "include/fx3_bsp.h"
 #include "include/debug.h"
 #include "include/uvc.h"
+#include "include/tlc59116.h"
 
 int hardware_version_num = 0x00;
 
@@ -29,7 +30,7 @@ char *Baidu_ProductDscr[16] = {
   "Baidu_Robotics_vision_XP3S",
   "Baidu_Robotics_vision_XPIRL",
   "Baidu_Robotics_vision_XPIRL2",
-  "Baidu_Robotics_vision_undefined_0110",
+  "Baidu_Robotics_vision_XPIRL3",
   "Baidu_Robotics_vision_undefined_0111",
   "Baidu_Robotics_vision_undefined_1000",
   "Baidu_Robotics_vision_undefined_1001",
@@ -81,7 +82,7 @@ void fx3_gpio_module_init(void) {
   gpioClock.halfDiv    = 0;
 
   /* Initialize Gpio interface */
-  apiRetStatus = CyU3PGpioInit(&gpioClock, NULL);
+  apiRetStatus = CyU3PGpioInit(&gpioClock, CyFx_GpioIntrCb);
   if (apiRetStatus != CY_U3P_SUCCESS) {
     sensor_err("GPIO Init failed, Error Code = 0x%x\r\n", apiRetStatus);
     CyFxAppErrorHandler(apiRetStatus);
@@ -91,6 +92,7 @@ void fx3_gpio_module_init(void) {
    * must use GpioOverride to configure it. */
   apiRetStatus = CyU3PDeviceGpioOverride(CAMERA_OE_GPIO, CyTrue) | \
                  CyU3PDeviceGpioOverride(CAMERA_RST_GPIO, CyTrue) | \
+                 CyU3PDeviceGpioOverride(CAMERA_EXPOSURE_GPIO, CyTrue) | \
                  CyU3PDeviceGpioOverride(CAMERA_SADR_GPIO, CyTrue) | \
                  CyU3PDeviceGpioOverride(CAMERA_STANDBY_GPIO, CyTrue) | \
                  CyU3PDeviceGpioOverride(SENSOR_LED_GPIO, CyTrue) | \
@@ -100,7 +102,14 @@ void fx3_gpio_module_init(void) {
                  CyU3PDeviceGpioOverride(HARD_VERSION_A0, CyTrue) | \
                  CyU3PDeviceGpioOverride(HARD_VERSION_A1, CyTrue) | \
                  CyU3PDeviceGpioOverride(HARD_VERSION_A2, CyTrue) | \
-                 CyU3PDeviceGpioOverride(HARD_VERSION_A3, CyTrue);
+                 CyU3PDeviceGpioOverride(HARD_VERSION_A3, CyTrue) | \
+                 CyU3PDeviceGpioOverride(UNUSED_GPIO1, CyTrue) | \
+                 CyU3PDeviceGpioOverride(UNUSED_GPIO2, CyTrue) | \
+                 CyU3PDeviceGpioOverride(UNUSED_GPIO3, CyTrue) | \
+                 CyU3PDeviceGpioOverride(UNUSED_GPIO4, CyTrue) | \
+                 CyU3PDeviceGpioOverride(UNUSED_GPIO5, CyTrue) | \
+                 CyU3PDeviceGpioOverride(UNUSED_GPIO6, CyTrue) | \
+                 CyU3PDeviceGpioOverride(UNUSED_GPIO7, CyTrue);
 
   if (apiRetStatus != CY_U3P_SUCCESS) {
     sensor_err("GPIO Override failed, Error Code = 0x%x\r\n", apiRetStatus);
@@ -125,6 +134,7 @@ void fx3_gpio_module_init(void) {
   /* init GPIO low level after init */
   gpioConfig.outValue    = CyFalse;
   apiRetStatus           = CyU3PGpioSetSimpleConfig(CAMERA_RST_GPIO, &gpioConfig) | \
+                           CyU3PGpioSetSimpleConfig(CAMERA_EXPOSURE_GPIO, &gpioConfig) | \
                            CyU3PGpioSetSimpleConfig(IMU_NCS_GPIO, &gpioConfig) | \
                            CyU3PGpioSetSimpleConfig(IMU_AD0_GPIO, &gpioConfig);
                            CyU3PGpioSetSimpleConfig(CAMPWR_CONTROL_GPIO, &gpioConfig);
@@ -157,11 +167,23 @@ void fx3_gpio_module_init(void) {
   sensor_type = (enum SensorType)hardware_version_num;
   sensor_info("hardware_version_num: 0x%x \r\n", hardware_version_num);
 
+  gpioConfig.inputEn     = CyTrue;
+  apiRetStatus           = CyU3PGpioSetSimpleConfig(UNUSED_GPIO1, &gpioConfig) | \
+                           CyU3PGpioSetSimpleConfig(UNUSED_GPIO2, &gpioConfig) | \
+                           CyU3PGpioSetSimpleConfig(UNUSED_GPIO3, &gpioConfig) | \
+                           CyU3PGpioSetSimpleConfig(UNUSED_GPIO4, &gpioConfig) | \
+                           CyU3PGpioSetSimpleConfig(UNUSED_GPIO5, &gpioConfig) | \
+                           CyU3PGpioSetSimpleConfig(UNUSED_GPIO6, &gpioConfig) | \
+                           CyU3PGpioSetSimpleConfig(UNUSED_GPIO7, &gpioConfig);
+  if (apiRetStatus != CY_U3P_SUCCESS) {
+    sensor_err("UNUSED GPIO  Set Error, Error = 0x%x\r\n", apiRetStatus);
+    CyFxAppErrorHandler(apiRetStatus);
+  }
   gpioConfig.driveLowEn  = CyTrue;
   gpioConfig.driveHighEn = CyTrue;
   gpioConfig.inputEn     = CyFalse;
   gpioConfig.intrMode    = CY_U3P_GPIO_NO_INTR;
-  if (sensor_type == XPIRL2) {
+  if (sensor_type == XPIRL2 || sensor_type == XPIRL3) {
     /* AR0141 CMOS_OE ENABLE(acitve LOW) */
     gpioConfig.outValue  = CyFalse;
   } else {
@@ -173,11 +195,11 @@ void fx3_gpio_module_init(void) {
     sensor_err("IMU GPIO Set Config Error, Error Code = 0x%x\r\n", apiRetStatus);
     CyFxAppErrorHandler(apiRetStatus);
   }
-  if (sensor_type == XPIRL2)
+  if (sensor_type == XPIRL2 || sensor_type == XPIRL3)
     fx3_LIMA_GPIO_init();
 }
 /**
- *  @brief      FX3 LIMA GPIO Init For XPIRL2.
+ *  @brief      FX3 LIMA GPIO Init For XPIRL2/3.
  *  @param[]    NULL.
  *  @return     NULL.
  */
@@ -186,6 +208,8 @@ void fx3_LIMA_GPIO_init(void) {
   CyU3PReturnStatus_t          apiRetStatus;
 
   apiRetStatus = CyU3PDeviceGpioOverride(LIMA_CATL1_GPIO, CyTrue) | \
+                 CyU3PDeviceGpioOverride(FRAME_VALID, CyTrue) | \
+                 CyU3PDeviceGpioOverride(LEDOUT1_IN, CyTrue) | \
                  CyU3PDeviceGpioOverride(IR_CTL_GPIO, CyTrue);
   if (apiRetStatus != CY_U3P_SUCCESS) {
     sensor_err("GPIO Override failed, Error Code = 0x%x\r\n", apiRetStatus);
@@ -201,44 +225,106 @@ void fx3_LIMA_GPIO_init(void) {
                            CyU3PGpioSetSimpleConfig(IR_CTL_GPIO, &gpioConfig);
 
   if (apiRetStatus != CY_U3P_SUCCESS) {
+    sensor_err("Infrared GPIO Set Config Error, Error Code = 0x%x\r\n", apiRetStatus);
+    CyFxAppErrorHandler(apiRetStatus);
+  }
+  sensor_dbg("LEDOUT1_IN and  Frame Valid init\r\n");
+    /* init input GPIO */
+  gpioConfig.outValue    = CyFalse;
+  gpioConfig.inputEn     = CyTrue;
+  gpioConfig.driveLowEn  = CyFalse;
+  gpioConfig.driveHighEn = CyFalse;
+  // gpioConfig.intrMode    = CY_U3P_GPIO_INTR_POS_EDGE;
+  gpioConfig.intrMode    = CY_U3P_GPIO_INTR_BOTH_EDGE;
+  apiRetStatus           = CyU3PGpioSetSimpleConfig(LEDOUT1_IN, &gpioConfig) | \
+                           CyU3PGpioSetSimpleConfig(FRAME_VALID, &gpioConfig);
+  if (apiRetStatus != CY_U3P_SUCCESS) {
     sensor_err("Camera GPIO Set Config Error, Error Code = 0x%x\r\n", apiRetStatus);
     CyFxAppErrorHandler(apiRetStatus);
   }
 }
 
+/* Callback for GPIO related interrupts */
+void CyFx_GpioIntrCb(uint8_t gpioId) {
+  CyBool_t gpioValue = CyFalse;
+  CyU3PReturnStatus_t apiRetStatus = CY_U3P_SUCCESS;
+  uint32_t flag;
+  static uint64_t flash_Rising_count = 0;
+  static uint64_t VD_Failing_count = 0;
+  static uint64_t VD_Rising_count = 0;
+
+  if (gpioId == LEDOUT1_IN) {
+    apiRetStatus = CyU3PGpioGetValue(gpioId, &gpioValue);
+    if (apiRetStatus == CY_U3P_SUCCESS) {
+      /* Check status of the pin is rising edge*/
+      if (gpioValue == CyTrue) {
+        flash_Rising_count++;
+        IR_LED_OFF();
+        if (XPIRL2_LIMA_open)
+          CyU3PEventSet(&glFxUVCEvent, CY_FX_UVC_GPIO1_INTR_CB_EVENT_FLAG, CYU3P_EVENT_OR);
+      }
+    }
+  } else if (gpioId == FRAME_VALID) {
+    apiRetStatus = CyU3PGpioGetValue(gpioId, &gpioValue);
+    if (apiRetStatus == CY_U3P_SUCCESS) {
+      /* Check status of the pin is rising edge*/
+      if (gpioValue == CyTrue) {
+        VD_Rising_count++;
+      } else {
+        VD_Failing_count++;
+        if ((XPIRLx_IR_ctrl.Set_infrared_mode == 1 || XPIRLx_IR_ctrl.Set_structured_mode == 1)
+            && VD_Failing_count % XPIRLx_IR_ctrl.RGB_IR_period == 0) {
+          if (CyU3PEventGet(&glFxUVCEvent, CY_FX_UVC_STREAM_EVENT, CYU3P_EVENT_AND, \
+            &flag, CYU3P_NO_WAIT) == CY_U3P_SUCCESS) {
+            IR_image_trigger = CyTrue;
+            IR_LED_ON();
+            // For debug
+            // CyU3PEventSet(&glFxUVCEvent, CY_FX_UVC_DEBUG_INTR_CB_EVENT_FLAG, CYU3P_EVENT_OR);
+            if (XPIRL2_LIMA_open) {
+              CyU3PEventSet(&glFxUVCEvent, CY_FX_UVC_GPIO0_INTR_CB_EVENT_FLAG, CYU3P_EVENT_OR);
+            }
+          }
+        }
+      }
+    }
+  } else {
+    // Maybe can't output log message success as running in interrupt context.
+    sensor_err("unkown gpio interrupt!\r\n");
+  }
+}
 /**
- *  @brief      TLC59116 power ON for XPIRL2.
+ *  @brief      TLC59116/TLC59108 power ON for XPIRLx.
  *  @param[]    NULL.
  *  @return     NULL.
  */
-void tlc59116_power_ON(void) {
+void tlc_power_ON(void) {
   CyU3PGpioSetValue(IR_CTL_GPIO, CyTrue);
 }
 
 /**
- *  @brief      TLC59116 power OFF for XPIRL2.
+ *  @brief      TLC59116/TLC59108 power OFF for XPIRLx.
  *  @param[]    NULL.
  *  @return     NULL.
  */
-void tlc59116_power_OFF(void) {
+void tlc_power_OFF(void) {
   CyU3PGpioSetValue(IR_CTL_GPIO, CyFalse);
 }
 
 /**
- *  @brief      LIMA_LED_ON for XPIRL2.
+ *  @brief      IR_LED_ON for XPIRLx.
  *  @param[]    NULL.
  *  @return     NULL.
  */
-void LIMA_LED_ON(void) {
+void IR_LED_ON(void) {
   CyU3PGpioSetValue(LIMA_CATL1_GPIO, CyTrue);
 }
 
 /**
- *  @brief      LIMA_LED_OFF for XPIRL2.
+ *  @brief      IR_LED_OFF for XPIRLx.
  *  @param[]    NULL.
  *  @return     NULL.
  */
-void LIMA_LED_OFF(void) {
+void IR_LED_OFF(void) {
   CyU3PGpioSetValue(LIMA_CATL1_GPIO, CyFalse);
 }
 
@@ -284,7 +370,7 @@ void sensor_gpio_init(void) {
     sensor_err("camera reset GPIO Set Value Error, Error Code = 0x%x\r\n", apiRetStatus);
     return;
   }
-  if (sensor_type == XPIRL2) {
+  if (sensor_type == XPIRL2 || sensor_type == XPIRL3) {
     /* AR0141 CMOS_OE ENABLE(acitve LOW) */
     apiRetStatus = CyU3PGpioSetValue(CAMERA_OE_GPIO, CyFalse);
   } else {
@@ -324,6 +410,8 @@ void sensor_gpio_init(void) {
   }
 
   v034_power_on();
+  // must let tlc59116 power on as reset pin of tlc59116 is same with camera sensor.
+  tlc_power_ON();
   CyU3PThreadSleep(100);
   /* camera chip hard reset */
   camera_hard_reset();

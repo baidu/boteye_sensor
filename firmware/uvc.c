@@ -46,6 +46,7 @@
 #include "include/fx3_bsp.h"
 #include "include/kfifo.h"
 #include "include/tlc59116.h"
+#include "include/tlc59108.h"
 #include "include/sensor_ar0141.h"
 
 /* debug_level :control debug log messages print level
@@ -53,7 +54,7 @@
  * 1 bit set: show messages level log
  * 2 bit set: show buff messages logging */
 int debug_level = 0;
-uint32_t firmware_ctrl_flag;
+struct firmware_ctl_t firmware_ctrl_flag;
 enum SensorType sensor_type;
 /******************************************************************************
                                          Global Variables
@@ -62,7 +63,7 @@ static int res_switch = 0;
 static CyU3PThread   uvcAppThread;                      /* UVC video streaming thread. */
 static CyU3PThread   uvcAppEP0Thread;                   /* UVC control request handling thread. */
 static CyU3PThread   Datahandle_Thread;                 /* IMU or other Data handle thread. */
-static CyU3PEvent    glFxUVCEvent;                      /* Event group used to signal threads. */
+CyU3PEvent    glFxUVCEvent;                             /* Event group used to signal threads. */
 CyU3PDmaMultiChannel glChHandleUVCStream;               /* DMA multi-channel handle. */
 static CyBool_t glSuspendEnbl    = CyFalse;             /* Whether Suspend Mode is requested. */
 static CyBool_t glTriggerSuspend = CyFalse;             /* Initiate suspend entry . */
@@ -103,6 +104,7 @@ static volatile CyBool_t addIMU = CyFalse;
 static volatile CyBool_t readyIMU = CyFalse;
 static uint8_t IMU_pool_buf[IMU_POOL_LEN] =  {0};
 struct __kfifo  IMU_kfifo;
+volatile CyBool_t IR_image_trigger = CyFalse;
 
 /* UVC Probe Control Settings for a USB 3.0 connection. */
 uint8_t glProbeCtrl[CY_FX_UVC_MAX_PROBE_SETTING] = {
@@ -204,7 +206,7 @@ void CyFxUVCAddHeader_IMU(uint8_t *buffer_p) {
   /*NOTE: we remain last_imu at first 17 bytes to old vesion of tracking */
   CyU3PMemCopy(buffer_p, (uint8_t *)last_imu, sizeof (last_imu));
   /* update imu burst embed image flags */
-  if (firmware_ctrl_flag & IMU_FROM_IMAGE_BIT) {
+  if (firmware_ctrl_flag.imu_from_image) {
     *(buffer_p + 16) = 1;
     CyU3PMutexGet(&(IMU_kfifo.lock), CYU3P_WAIT_FOREVER);
     imu_fifo_len = kfifo_used(&IMU_kfifo);
@@ -214,6 +216,16 @@ void CyFxUVCAddHeader_IMU(uint8_t *buffer_p) {
       kfifo_out(&IMU_kfifo, (void *)(buffer_p + IMU_BURST_LEN + 4), imu_fifo_len);
     }
     CyU3PMutexPut(&(IMU_kfifo.lock));
+  }
+  if ((sensor_type == XPIRL2 || sensor_type == XPIRL3) && IR_image_trigger == CyFalse) {
+    *(buffer_p + 0) = 'R';
+    *(buffer_p + 1) = 'G';
+    *(buffer_p + 2) = 'B';
+  } else if  ((sensor_type == XPIRL2 || sensor_type == XPIRL3) && IR_image_trigger == CyTrue) {
+    *(buffer_p + 0) = 'I';
+    *(buffer_p + 1) = 'R';
+    sensor_err("IR image\r\n");
+    IR_image_trigger = CyFalse;
   }
   return;
 }
@@ -672,23 +684,23 @@ static void CyFxUVCApplnInit(void) {
   CyU3PThreadSleep(100);
   readyIMU = CyTrue;
   sensor_dbg("IMU is ready!\r\n");
-  if (sensor_type == XPIRL2) {
+  if (sensor_type == XPIRL2 || sensor_type == XPIRL3) {
     /* Initialize AR0141 senosr */
     AR0141_sensor_init();
   } else {
     /* Initialize v034/v024 senosr */
-    if (sensor_type == XPIRL) {
-      // open led_out for XPIRL
-      MT9V034_Parallel[(0x1B -1) * 2 + 1] = 0x0000;
-    }
     V034_sensor_init();
   }
   CyU3PThreadSleep(10);
   // MT9V024/034 AR0141's standby mode(ACTIVE HIGH)
   sensor_set_power_mode(SENSOR_STANDBY);
-  /* init tlc59116 */
-  if (sensor_type == XPIRL) {
+  /* Only XPIRL2 init tlc59116 */
+  if (sensor_type == XPIRL2) {
     tlc59116_init();
+    tlc59116_all_close();
+  } else if (sensor_type == XPIRL3) {
+    tlc59108_init();
+    tlc59108_all_close();
   }
   /* USB initialization. */
   apiRetStatus = CyU3PUsbStart();
@@ -834,6 +846,9 @@ void UVC_AppThread_Entry(uint32_t input) {
 #endif
   uint32_t current_time = 0;
   uint32_t last_time = 0;
+  uint32_t cols;
+  uint32_t line_start = 0;
+  uint16_t line_num = 0;
   /* Initialize the Uart Debug Module */
   CyFxUVCApplnDebugInit();
   sensor_dbg("Uart Debug Module init succeed, compiled at [%s] %s\r\n", __TIME__, __DATE__);
@@ -858,6 +873,12 @@ void UVC_AppThread_Entry(uint32_t input) {
    This sequence ensures that we do not get stuck in a loop where we are trying to send data instead
    of handling the abort request.
  */
+  if (sensor_type == XPIRL2 || sensor_type == XPIRL3) {
+    cols = 1280;
+  } else {
+    cols = 640;
+  }
+  int m = 0;
   for (;;) {
     /* Waiting for the Video Stream Event */
     if (CyU3PEventGet(&glFxUVCEvent, CY_FX_UVC_STREAM_EVENT, CYU3P_EVENT_AND, &flag,
@@ -880,7 +901,16 @@ void UVC_AppThread_Entry(uint32_t input) {
           CyFxUVCAddHeader(produced_buffer.buffer - CY_FX_UVC_MAX_HEADER, CY_FX_UVC_HEADER_EOF);
           // sensor_info("a frame Transfer prodCount:%d consCount:%d\r\n", prodCount, consCount);
         }
-
+        for (;;) {
+          m = line_start - CY_FX_UVC_BUF_FULL_SIZE * prodCount;
+          if (line_num > 5) {
+            *(produced_buffer.buffer + m)  = line_num & 0xFF;
+          }
+          line_num++;
+          line_start = line_start + cols * 2;
+          if (line_start > (prodCount * CY_FX_UVC_BUF_FULL_SIZE + produced_buffer.count))
+            break;
+        }
         /* Commit the updated DMA buffer to the USB endpoint. */
         prodCount++;
         // sensor_dbg("CY_FX_UVC_STREAM_EVENT send buffer now \r\n");
@@ -898,12 +928,14 @@ void UVC_AppThread_Entry(uint32_t input) {
       if ((hitFV) && (prodCount == consCount)) {
         prodCount = 0;
         consCount = 0;
+        line_start = 0;
+        line_num = 0;
         hitFV     = CyFalse;
         addIMU    = CyTrue;
 #ifdef BACKFLOW_DETECT
         back_flow_detected = 0;
 #endif
-        if (firmware_ctrl_flag & PRINT_FRAME_RATE_BIT) {
+        if (firmware_ctrl_flag.print_frame_rate) {
           current_time = CyU3PGetTime();
           sensor_info("a frame Transfer time:%d ms\r\n", (current_time - last_time));
           last_time = current_time;
@@ -934,6 +966,8 @@ void UVC_AppThread_Entry(uint32_t input) {
       // o.w. re-play doesn't work
       prodCount = 0;
       consCount = 0;
+      line_start = 0;
+      line_num = 0;
       /* If we have a stream abort request pending. */
       if (CyU3PEventGet(&glFxUVCEvent, CY_FX_UVC_STREAM_ABORT_EVENT, CYU3P_EVENT_AND_CLEAR,
                         &flag, CYU3P_NO_WAIT) == CY_U3P_SUCCESS) {
@@ -941,14 +975,15 @@ void UVC_AppThread_Entry(uint32_t input) {
 
         IMU_kfifo.kfifo_flag &= ~KFIFO_IS_START;
         sensor_dbg("got CY_FX_UVC_STREAM_ABORT_EVENT \r\n");
-        if (sensor_type == XPIRL2) {
+        if (sensor_type == XPIRL2 || sensor_type == XPIRL3) {
           AR0141_stream_stop(AR0141_ADDR_WR);
-          tlc59116_off(0xFFFF);
-          // TODO(zhoury): use LEDOUT of sensor is better for Power Manage
-          LIMA_LED_OFF();
+          if (sensor_type == XPIRL2)
+            tlc59116_all_close();
+          else if (sensor_type == XPIRL3)
+            tlc59108_all_close();
+          IR_LED_OFF();
         } else {
           V034_stream_stop(SENSOR_ADDR_WR);
-          tlc59116_off(0xFFFF);
         }
         CyU3PThreadSleep(10);
         sensor_set_power_mode(SENSOR_STANDBY);
@@ -1300,11 +1335,14 @@ static void Handle_ExtensionUnit_Rqts(void) {
   case CY_FX_UVC_XU_FLAG_RW:
     EU_Rqts_firmware_flag(bRequest);
     break;
-  case CY_FX_UVC_XU_TLC_RW:
-    EU_Rqts_tlc59116_control(bRequest);
+  case CY_FX_UVC_XU_IR_RW:
+    EU_Rqts_IR_control(bRequest);
     break;
   case CY_FX_UVC_XU_SPLAH_RW:
     EU_Rqts_flash_RW(bRequest);
+    break;
+  case CY_FX_UVC_XU_DEBUG_RW:
+    EU_Rqts_debug_RW(bRequest);
     break;
   default:
     sensor_err("invalid extension cmd: 0x%x\r\n", wValue);
@@ -1414,8 +1452,7 @@ static void Handle_VideoStreaming_Rqts(void) {
         res_switch++;
         sensor_set_power_mode(SENSOR_ACTIVE);
         CyU3PThreadSleep(10);
-        if (sensor_type == XPIRL2) {
-          LIMA_LED_ON();
+        if (sensor_type == XPIRL2 || sensor_type == XPIRL3) {
           AR0141_stream_start(AR0141_ADDR_WR);
         } else {
           V034_stream_start(SENSOR_ADDR_WR);
@@ -1510,16 +1547,29 @@ void UVC_EP0Thread_Entry(uint32_t input) {
     CyU3PThreadRelinquish();
   }
 }
-
 /*
  * Entry function for the Data handle thread.
  */
 void Data_handle_Thread_Entry(uint32_t input) {
   CyU3PReturnStatus_t status = CY_U3P_SUCCESS;
   int count = 0;
-
+  uint32_t flag;
   sensor_dbg("start Data handle thread!\r\n");
   for (;;) {
+    // Only XPIRL2 use this control method to turn on/off LIMA light As it's not a good method.
+    if (sensor_type == XPIRL2 && CyU3PEventGet(&glFxUVCEvent, CY_FX_UVC_GPIO0_INTR_CB_EVENT_FLAG, \
+        CYU3P_EVENT_AND_CLEAR, &flag, CYU3P_NO_WAIT) == CY_U3P_SUCCESS) {
+        // tlc59116_LIMA_ON();
+        tlc59116_LIMA_open(XPIRLx_IR_ctrl.pwm_value);
+    }
+    if (sensor_type == XPIRL2 && CyU3PEventGet(&glFxUVCEvent, CY_FX_UVC_GPIO1_INTR_CB_EVENT_FLAG, \
+        CYU3P_EVENT_AND_CLEAR, &flag, CYU3P_NO_WAIT) == CY_U3P_SUCCESS) {
+        tlc59116_LIMA_close();
+    }
+    if (CyU3PEventGet(&glFxUVCEvent, CY_FX_UVC_DEBUG_INTR_CB_EVENT_FLAG, \
+        CYU3P_EVENT_AND_CLEAR, &flag, CYU3P_NO_WAIT) == CY_U3P_SUCCESS) {
+        sensor_err("detect interrupt signal\r\n");
+    }
     if (glIsApplnActive && readyIMU == CyTrue) {
 #ifdef IMU_LOOP_SAMPLE
       uint8_t raw_IMU_data[14];
@@ -1540,7 +1590,7 @@ void Data_handle_Thread_Entry(uint32_t input) {
       last_imu[15] = t >> 0;
       /* show this version can get burst imu from image. */
       last_imu[16] = 0;
-      if ((firmware_ctrl_flag & IMU_FROM_IMAGE_BIT) && (IMU_kfifo.kfifo_flag & KFIFO_IS_START)) {
+      if (firmware_ctrl_flag.imu_from_image && (IMU_kfifo.kfifo_flag & KFIFO_IS_START)) {
         CyU3PMutexGet(&(IMU_kfifo.lock), CYU3P_WAIT_FOREVER);
         if (kfifo_unused(&IMU_kfifo) >= sizeof(last_imu)) {
           kfifo_in(&IMU_kfifo, (void *)last_imu, sizeof(last_imu));
@@ -1550,43 +1600,6 @@ void Data_handle_Thread_Entry(uint32_t input) {
         CyU3PMutexPut(&(IMU_kfifo.lock));
       }
 #endif
-      CyU3PThreadSleep(1);
-      count +=100;
-    } else {
-      /* No active data transfer. Sleep for a small amount of time. */
-      count++;
-      CyU3PThreadSleep(100);
-    }
-    // infrared light control
-    if ((sensor_type == XPIRL || sensor_type == XPIRL2) && tl59116_ctrl.UpdateBit == 1) {
-      if (tl59116_ctrl.dumpRegister == 1)
-        tlc59116_dump_register();
-      if (tl59116_ctrl.SetCH_on_mode == 0 && tl59116_ctrl.SetCH_pwm_mode == 0) {
-        // CHECK channel_value if is 0, will close default close channel
-        if (tl59116_ctrl.channel_value == 0 )
-          tl59116_ctrl.channel_value = TLC59116_DEFAULT_CLOSE_CH;
-        tlc59116_off(tl59116_ctrl.channel_value);
-      } else if (tl59116_ctrl.SetCH_on_mode == 1 && tl59116_ctrl.SetCH_pwm_mode == 0) {
-        // CHECK channel_value if is 0, will close default open channel
-        if (tl59116_ctrl.channel_value == 0) {
-          tl59116_ctrl.channel_value = (sensor_type == XPIRL ?
-                                        XPIRL_DEFAULT_OPEN_CH : XPIRL2_DEFAULT_OPEN_CH);
-        }
-        sensor_info("tl59116: on mode, channel:0x%x\r\n", tl59116_ctrl.channel_value);
-        tlc59116_CH_on(tl59116_ctrl.channel_value);
-      } else if (tl59116_ctrl.SetCH_on_mode == 0 && tl59116_ctrl.SetCH_pwm_mode == 1) {
-        // CHECK channel_value if is 0, will close default open channel
-        if (tl59116_ctrl.channel_value == 0) {
-          tl59116_ctrl.channel_value = (sensor_type == XPIRL ?
-                                        XPIRL_DEFAULT_OPEN_CH : XPIRL2_DEFAULT_OPEN_CH);
-        }
-        sensor_info("tl59116: pwm mode, channel:0x%x pwm_value:%d\r\n", tl59116_ctrl.channel_value,
-                                                                 tl59116_ctrl.pwm_value);
-        tlc59116_set_pwm(tl59116_ctrl.channel_value, tl59116_ctrl.pwm_value);
-      } else {
-        sensor_err("tl59116 channel set error\r\n");
-      }
-      tl59116_ctrl.UpdateBit = 0;
     }
 
     // bus keep standby more than 1s
@@ -1595,12 +1608,17 @@ void Data_handle_Thread_Entry(uint32_t input) {
       glWakeUpPol      = CY_U3P_SYS_USB_BUS_ACTVTY_WAKEUP_SRC;
       glTriggerSuspend =  CyTrue;
       count = 0;
-      if (sensor_type == XPIRL2)
-        tlc59116_power_OFF();
+      // As hardware design error, tl59116 of XPIRL2 can't power down when cypress sleep, which will
+      // make hepatgon can't turn on randomly.
+      if (sensor_type == XPIRL3)
+        tlc_power_OFF();
     }
     CyFxPowerManage();
     /* Allow other ready threads to run before proceeding. */
     CyU3PThreadRelinquish();
+
+    CyU3PThreadSleep(1);
+    count++;
   }
 }
 
@@ -1636,10 +1654,11 @@ void CyFxPowerManage(void) {
 
         sensor_dbg("Suspend Wakeup Success wakeup source %d\r\n", waketype);
       }
-      if (sensor_type == XPIRL2) {
-        tlc59116_power_ON();
+      // TODO(zhoury) resume XPIRL3
+      if (sensor_type == XPIRL3) {
+        tlc_power_ON();
         CyU3PThreadSleep(10);
-        tlc59116_init();
+        tlc59108_init();
       }
     }
   }
@@ -1716,13 +1735,19 @@ fatalErrorHandler:
 int main(void) {
   CyU3PReturnStatus_t apiRetStatus;
 
-  firmware_ctrl_flag = firmware_ctrl_flag | DEBUG_DBG_BIT;
-  firmware_ctrl_flag = firmware_ctrl_flag | DEBUG_INFO_BIT;
-  firmware_ctrl_flag = firmware_ctrl_flag | DEBUG_DUMP_BIT;
-  firmware_ctrl_flag = firmware_ctrl_flag | IMU_FROM_IMAGE_BIT;
-  // firmware_ctrl_flag = firmware_ctrl_flag | PRINT_FRAME_RATE_BIT;
+  firmware_ctrl_flag.log_dbg = 1;
+  firmware_ctrl_flag.log_info = 1;
+  firmware_ctrl_flag.log_dump = 1;
+  firmware_ctrl_flag.imu_from_image = 0;
+  firmware_ctrl_flag.print_frame_rate = 0;
 
-  debug_level = firmware_ctrl_flag & (DEBUG_DBG_BIT | DEBUG_INFO_BIT |DEBUG_DUMP_BIT);
+  debug_level = firmware_ctrl_flag.log_dbg | firmware_ctrl_flag.log_info << 1 \
+              | firmware_ctrl_flag.log_dump << 2;
+
+  XPIRLx_IR_ctrl.Set_infrared_mode = 0;
+  XPIRLx_IR_ctrl.Set_structured_mode = 0;
+  XPIRLx_IR_ctrl.pwm_value = 0;
+  XPIRLx_IR_ctrl.RGB_IR_period = 0;
   /* Initialize the device */
   apiRetStatus = CyU3PDeviceInit(0);
   if (apiRetStatus != CY_U3P_SUCCESS) {

@@ -24,8 +24,8 @@
 #define IMU_NCS_GPIO           19  // CTL[2]
 #define CAMERA_OE_GPIO         20  // CTL[3]
 #define CAMERA_STANDBY_GPIO    21  // CTL[4]
-/* warning: not use two pin Now. */
 #define CAMERA_EXPOSURE_GPIO   23  // CTL[6]
+/* warning: not use two pin Now. */
 #define IMU_INT_GPIO           24  // CTL[7]
 #define IMU_G_FSYNC_GPIO       25  // CTL[8]
 
@@ -33,10 +33,13 @@
 #define CAMERA_SADR_GPIO       50  // I2S-CLK
 #define CAMPWR_CONTROL_GPIO    52  // I2S-WS
 
-#define DEBUG_GPIO1            37  // DQ20
-#define DEBUG_GPIO2            38  // DQ21
-#define DEBUG_GPIO3            39  // DQ22
-#define DEBUG_GPIO4            40  // DQ23
+#define UNUSED_GPIO1           34  // DQ17
+#define UNUSED_GPIO2           35  // DQ18
+#define UNUSED_GPIO3           36  // DQ19
+#define UNUSED_GPIO4           37  // DQ20
+#define UNUSED_GPIO5           38  // DQ21
+#define UNUSED_GPIO6           39  // DQ22
+#define UNUSED_GPIO7           40  // DQ23
 
 #define HARD_VERSION_A3        41  // DQ24
 #define HARD_VERSION_A2        42  // DQ25
@@ -44,8 +47,12 @@
 #define HARD_VERSION_A0        44  // DQ27
 
 // LIMA LED control pin
-#define LIMA_CATL1_GPIO       26  // CTL[9]
-#define IR_CTL_GPIO           27  // CTL[10]
+#define LIMA_CATL1_GPIO        26  // CTL[9]
+#define IR_CTL_GPIO            27  // CTL[10]
+// LEDOUT1 and Frame Valid(VD) Interrupt Input
+#define FRAME_VALID            33  // DQ16
+#define LEDOUT1_IN             22  // CTL[10]
+
 
 #define SINGLE_V034_WITH_DIFF_ADDR
 
@@ -76,10 +83,10 @@ extern void v034_set_unified_addr(void);
 extern void v034_power_on(void);
 extern void v034_power_off(void);
 extern void sensor_set_power_mode(enum SENSOR_POWER_MODE state);
-
+void CyFx_GpioIntrCb(uint8_t gpioId);
 extern void fx3_LIMA_GPIO_init(void);
-extern void tlc59116_power_ON(void);
-extern void tlc59116_power_OFF(void);
-extern void LIMA_LED_ON(void);
-extern void LIMA_LED_OFF(void);
+extern void tlc_power_ON(void);
+extern void tlc_power_OFF(void);
+extern void IR_LED_ON(void);
+extern void IR_LED_OFF(void);
 #endif  // FIRMWARE_INCLUDE_FX3_BSP_H_

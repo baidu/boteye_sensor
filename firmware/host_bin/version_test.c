@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright 2017 Baidu Robotic Vision Authors. All Rights Reserved.
+ * Copyright 2017-2018 Baidu Robotic Vision Authors. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,7 +46,7 @@ char *Baidu_ProductDscr[16] = {
   "Baidu_Robotics_vision_XP3S",
   "Baidu_Robotics_vision_XPIRL",
   "Baidu_Robotics_vision_XPIRL2",
-  "Baidu_Robotics_vision_undefined_0110",
+  "Baidu_Robotics_vision_XPIRL3",
   "Baidu_Robotics_vision_undefined_0111",
   "Baidu_Robotics_vision_undefined_1000",
   "Baidu_Robotics_vision_undefined_1001",

@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright 2017 Baidu Robotic Vision Authors. All Rights Reserved.
+ * Copyright 2017-2018 Baidu Robotic Vision Authors. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -432,6 +432,7 @@ void update_v034_flip_left(void) {
   switch (sensor_type) {
   case XP_XP2:
   case XPIRL2:
+  case XPIRL3:
     MT9V034_Parallel[(0x0D -1) * 2 + 1] = 0x0300;
     break;
   case XP2s:
@@ -450,6 +451,7 @@ void update_v034_flip_right(void) {
   switch (sensor_type) {
   case XP_XP2:
   case XPIRL2:
+  case XPIRL3:
   case XP2s:
   case XP3:
     MT9V034_Parallel[(0x0D -1) * 2 + 1] = 0x0300;

@@ -31,6 +31,7 @@
 #include "include/xp_sensor_firmware_version.h"
 #include "include/inv_icm20608.h"
 #include "include/tlc59116.h"
+#include "include/tlc59108.h"
 #include "include/sensor_ar0141.h"
 
   /* FLASH sector Memory Map
@@ -203,7 +204,6 @@ void EU_Rqts_spi_flash(uint8_t bRequest) {
       sensor_err("CyU3 get Ep0 data failed\r\n");
       CyFxAppErrorHandler(apiRetStatus);
     }
-
     if (Ep0Buffer[0] == 'E') {
       sensor_dbg("erase flash\r\n");
       CyFxFlashProgEraseSector(CyTrue, 0, Ep0Buffer);
@@ -249,7 +249,7 @@ void EU_Rqts_cam_reg(uint8_t bRequest) {
     // sensor_dbg("EU request camera reg get cur\r\n");
     Ep0Buffer[0] = read_reg_addr >> 8;
     Ep0Buffer[1] = read_reg_addr & 0xFF;
-    if (sensor_type == XPIRL2)
+    if (sensor_type == XPIRL2 || sensor_type == XPIRL3)
       readval = AR0141_RegisterRead(Ep0Buffer[0], Ep0Buffer[1]);
     else
       readval = V034_RegisterRead(Ep0Buffer[0], Ep0Buffer[1]);
@@ -275,7 +275,7 @@ void EU_Rqts_cam_reg(uint8_t bRequest) {
       LowAddr  = Ep0Buffer[1];
       HighData = Ep0Buffer[2];
       LowData  = Ep0Buffer[3];
-      if (sensor_type == XPIRL2)
+      if (sensor_type == XPIRL2 || sensor_type == XPIRL3)
         AR0141_RegisterWrite(HighAddr, LowAddr, HighData, LowData);
       else
         V034_RegisterWrite(HighAddr, LowAddr, HighData, LowData);
@@ -401,10 +401,10 @@ void EU_Rqts_firmware_flag(uint8_t bRequest) {
   switch (bRequest) {
   case CY_FX_USB_UVC_GET_CUR_REQ:
     sensor_dbg("EU firmware flag get firmware_ctrl_flag: 0x%x\r\n", firmware_ctrl_flag);
-    Ep0Buffer[0] = firmware_ctrl_flag >> 24;
-    Ep0Buffer[1] = firmware_ctrl_flag >> 16;
-    Ep0Buffer[2] = firmware_ctrl_flag >> 8;
-    Ep0Buffer[3] = firmware_ctrl_flag >> 0;
+    Ep0Buffer[0] = *((uint32_t *)(&firmware_ctrl_flag)) >> 24;
+    Ep0Buffer[1] = *((uint32_t *)(&firmware_ctrl_flag)) >> 16;
+    Ep0Buffer[2] = *((uint32_t *)(&firmware_ctrl_flag)) >> 8;
+    Ep0Buffer[3] = *((uint32_t *)(&firmware_ctrl_flag)) >> 0;
     CyU3PUsbSendEP0Data(4, Ep0Buffer);
     break;
   case CY_FX_USB_UVC_SET_CUR_REQ:
@@ -413,8 +413,14 @@ void EU_Rqts_firmware_flag(uint8_t bRequest) {
       sensor_err("CyU3 get Ep0 data failed\r\n");
       CyFxAppErrorHandler(apiRetStatus);
     }
-    firmware_ctrl_flag = Ep0Buffer[0] << 24 | Ep0Buffer[1] << 16 | Ep0Buffer[2] << 8 | Ep0Buffer[3];
-    debug_level = firmware_ctrl_flag & (DEBUG_DBG_BIT | DEBUG_INFO_BIT |DEBUG_DUMP_BIT);
+    uint32_t firmware_ctrl_flag_tmp = Ep0Buffer[0] << 24 | \
+                                      Ep0Buffer[1] << 16 | \
+                                      Ep0Buffer[2] << 8  | \
+                                      Ep0Buffer[3];
+    CyU3PMemCopy((uint8_t *)(&firmware_ctrl_flag), (uint8_t *)(&firmware_ctrl_flag_tmp),
+                  sizeof(firmware_ctrl_flag));
+    debug_level = firmware_ctrl_flag.log_dbg | firmware_ctrl_flag.log_info << 1 \
+                | firmware_ctrl_flag.log_dump << 2;
     sensor_dbg("EU firmware flag set firmware_ctrl_flag: 0x%x\r\n", firmware_ctrl_flag);
     break;
   case CY_FX_USB_UVC_GET_LEN_REQ:
@@ -440,20 +446,19 @@ void EU_Rqts_firmware_flag(uint8_t bRequest) {
  *  @param[out] bRequest    bRequst value of uvc.
  *  @return     0 if successful.
  */
-void EU_Rqts_tlc59116_control(uint8_t bRequest) {
+void EU_Rqts_IR_control(uint8_t bRequest) {
   uint8_t Ep0Buffer[32] = {0};
   uint16_t readCount;
   CyU3PReturnStatus_t apiRetStatus = CY_U3P_SUCCESS;
 
   switch (bRequest) {
   case CY_FX_USB_UVC_GET_CUR_REQ:
-    // TODO(zhoury): add tl59116 control of XPIRL2
-    if (sensor_type == XPIRL || sensor_type == XPIRL2) {
-      Ep0Buffer[0] = *((uint32_t *)(&tl59116_ctrl)) >> 24;
-      Ep0Buffer[1] = *((uint32_t *)(&tl59116_ctrl)) >> 16;
-      Ep0Buffer[2] = *((uint32_t *)(&tl59116_ctrl)) >> 8;
-      Ep0Buffer[3] = *((uint32_t *)(&tl59116_ctrl)) >> 0;
-      sensor_dbg("EU tlc59116 control read : 0x%x\r\n", tl59116_ctrl);
+    if (sensor_type == XPIRL2  || sensor_type == XPIRL3) {
+      Ep0Buffer[0] = *((uint32_t *)(&XPIRLx_IR_ctrl)) >> 24;
+      Ep0Buffer[1] = *((uint32_t *)(&XPIRLx_IR_ctrl)) >> 16;
+      Ep0Buffer[2] = *((uint32_t *)(&XPIRLx_IR_ctrl)) >> 8;
+      Ep0Buffer[3] = *((uint32_t *)(&XPIRLx_IR_ctrl)) >> 0;
+      sensor_dbg("EU IR control read : 0x%x\r\n", XPIRLx_IR_ctrl);
     } else {
       sensor_err("This sensor type don't support infrared light read control.\r\n");
     }
@@ -465,14 +470,22 @@ void EU_Rqts_tlc59116_control(uint8_t bRequest) {
       sensor_err("CyU3 get Ep0 data failed\r\n");
       CyFxAppErrorHandler(apiRetStatus);
     }
-    if (sensor_type == XPIRL || sensor_type == XPIRL2) {
+    if (sensor_type == XPIRL2 || sensor_type == XPIRL3) {
       if ((Ep0Buffer[3] & 0x80) == 0)
         Ep0Buffer[3] = Ep0Buffer[3] | 0x80;
-      uint32_t tl59116_ctrl_tmp = Ep0Buffer[0] << 24 | Ep0Buffer[1] << 16 |
-                                  Ep0Buffer[2] << 8 | Ep0Buffer[3];
-      CyU3PMemCopy((uint8_t *)(&tl59116_ctrl), (uint8_t *)(&tl59116_ctrl_tmp),
-                    sizeof(tl59116_ctrl));
-      sensor_dbg("EU tlc59116 control set : 0x%x\r\n", tl59116_ctrl);
+      uint32_t XPIRL2_IR_ctrl_tmp = Ep0Buffer[0] << 24 | \
+                                    Ep0Buffer[1] << 16 | \
+                                    Ep0Buffer[2] << 8  | \
+                                    Ep0Buffer[3];
+      CyU3PMemCopy((uint8_t *)(&XPIRLx_IR_ctrl), (uint8_t *)(&XPIRL2_IR_ctrl_tmp),
+                    sizeof(XPIRLx_IR_ctrl));
+      sensor_dbg("EU IR control set : 0x%x\r\n", XPIRLx_IR_ctrl);
+      if (sensor_type == XPIRL2)
+        xpril2_proc_ir_ctl(&XPIRLx_IR_ctrl);
+      else if (sensor_type == XPIRL3)
+        xpril3_proc_ir_ctl(&XPIRLx_IR_ctrl);
+      else
+        sensor_err("This type sensor don't support IR control\r\n");
     } else {
       sensor_err("This sensor type don't support infrared light set control.\r\n");
     }
@@ -481,15 +494,15 @@ void EU_Rqts_tlc59116_control(uint8_t bRequest) {
     Ep0Buffer[0] = 4;
     Ep0Buffer[1] = 0;
     CyU3PUsbSendEP0Data(2, (uint8_t *)Ep0Buffer);
-    sensor_dbg("EU tlc59116 control get len:%d request\r\n", Ep0Buffer[0]);
+    sensor_dbg("EU IR control get len:%d request\r\n", Ep0Buffer[0]);
     break;
   case CY_FX_USB_UVC_GET_INFO_REQ:
     Ep0Buffer[0] = 3;
     CyU3PUsbSendEP0Data(1, (uint8_t *)Ep0Buffer);
-    sensor_dbg("EU tlc59116 control get info request\r\n");
+    sensor_dbg("EU IR control get info request\r\n");
     break;
   default:
-    sensor_err("unknown tlc59116 control cmd: 0x%x\r\n", bRequest);
+    sensor_err("unknown IR control cmd: 0x%x\r\n", bRequest);
     CyU3PUsbStall(0, CyTrue, CyFalse);
   //   break;
   }
@@ -548,6 +561,55 @@ void EU_Rqts_flash_RW(uint8_t bRequest) {
     break;
   }
 }
+
+/**
+ *  @brief      handle debug some variable value from driver.
+ *  @param[out] bRequest    bRequst value of uvc.
+ *  @return     NULL.
+ */
+uint32_t debug_variable1 = 1;
+uint32_t debug_variable2 = 1;
+void EU_Rqts_debug_RW(uint8_t bRequest) {
+  uint8_t Ep0Buffer[32] = {0};
+  uint16_t readCount;
+  uint8_t debug_tmp[255];
+  CyU3PReturnStatus_t apiRetStatus = CY_U3P_SUCCESS;
+  uint32_t* debug_ptr = (uint32_t*)debug_tmp;
+
+  switch (bRequest) {
+  case CY_FX_USB_UVC_GET_CUR_REQ:
+    *debug_ptr = debug_variable1;
+    *(debug_ptr + 1) = debug_variable2;
+    sensor_dbg("debug read value\r\n");
+    CyU3PUsbSendEP0Data(255, debug_tmp);
+    break;
+  case CY_FX_USB_UVC_SET_CUR_REQ:
+    sensor_dbg("debug write value\r\n");
+    apiRetStatus = CyU3PUsbGetEP0Data(255, debug_tmp, &readCount);
+    if (apiRetStatus != CY_U3P_SUCCESS) {
+      sensor_err("CyU3 get Ep0 data failed\r\n");
+      CyFxAppErrorHandler(apiRetStatus);
+      break;
+    }
+    debug_variable1 = *debug_ptr;
+    debug_variable2 = *(debug_ptr + 1);
+    break;
+  case CY_FX_USB_UVC_GET_LEN_REQ:
+    Ep0Buffer[0] = 255;
+    Ep0Buffer[1] = 0;
+    CyU3PUsbSendEP0Data(2, (uint8_t *)Ep0Buffer);
+    break;
+  case CY_FX_USB_UVC_GET_INFO_REQ:
+    Ep0Buffer[0] = 3;
+    CyU3PUsbSendEP0Data(1, (uint8_t *)Ep0Buffer);
+    break;
+  default:
+    sensor_err("unknown flash cmd: 0x%x\r\n", bRequest);
+    CyU3PUsbStall(0, CyTrue, CyFalse);
+    break;
+  }
+}
+
 /* SPI initialization for flash programmer application. */
 CyU3PReturnStatus_t CyFxFlashProgSpiInit(uint16_t pageLen) {
   CyU3PReturnStatus_t status = CY_U3P_SUCCESS;

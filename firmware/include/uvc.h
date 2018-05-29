@@ -29,13 +29,28 @@
 #include <cyu3usbconst.h>
 #include <cyu3externcstart.h>
 #include <cyu3externcend.h>
+#include <cyu3system.h>
+#include <cyu3os.h>
+#include <cyu3dma.h>
+#include <cyu3error.h>
+#include <cyu3usb.h>
+#include <cyu3uart.h>
+#include <cyu3gpif.h>
+#include <cyu3i2c.h>
+#include <cyu3gpio.h>
+#include <cyu3pib.h>
+#include <cyu3utils.h>
 
-#define DEBUG_DBG_BIT           (0x01 << 0)
-#define DEBUG_INFO_BIT          (0x01 << 1)
-#define DEBUG_DUMP_BIT          (0x01 << 2)
-#define IMU_FROM_IMAGE_BIT      (0x01 << 3)
-#define PRINT_FRAME_RATE_BIT    (0x01 << 4)
-extern uint32_t firmware_ctrl_flag;
+struct firmware_ctl_t {
+    uint8_t log_dbg: 1;
+    uint8_t log_info: 1;
+    uint8_t log_dump: 1;
+    uint8_t imu_from_image: 1;
+    uint8_t print_frame_rate: 1;
+    uint8_t tmp_bit: 3;
+    uint8_t tmp8;
+    uint16_t tmp16;
+};
 
 enum  SensorType {
   XP_XP2 = 0,
@@ -43,9 +58,13 @@ enum  SensorType {
   XP3 = 2,
   XP3s = 3,
   XPIRL = 4,
-  XPIRL2 = 5
+  XPIRL2 = 5,
+  XPIRL3 = 6
 };
 extern enum SensorType sensor_type;
+extern CyU3PEvent    glFxUVCEvent;
+extern struct firmware_ctl_t firmware_ctrl_flag;
+extern volatile CyBool_t IR_image_trigger;
 /* Definitions to enable/disable special features in this UVC application. */
 // Enable if Pan, Tilt and Zoom controls are to be implemented.
 // #define UVC_PTZ_SUPPORT
@@ -137,6 +156,10 @@ extern enum SensorType sensor_type;
    as soon as serviced by the firmware.
  */
 #define CY_FX_UVC_VIDEO_STREAM_REQUEST_EVENT    (1 << 3)
+/* GPIO Interrupt Event  */
+#define CY_FX_UVC_GPIO0_INTR_CB_EVENT_FLAG      (1 << 4)
+#define CY_FX_UVC_GPIO1_INTR_CB_EVENT_FLAG      (1 << 5)
+#define CY_FX_UVC_DEBUG_INTR_CB_EVENT_FLAG      (1 << 6)
 
 /*
    The following constants are taken from the USB and USB Video Class (UVC) specifications.
@@ -260,8 +283,9 @@ extern enum SensorType sensor_type;
 #define CY_FX_UVC_XU_REG_RW                                 (uint16_t)(0x0e00)
 #define CY_FX_UVC_XU_HVER_RW                                (uint16_t)(0x0f00)
 #define CY_FX_UVC_XU_FLAG_RW                                (uint16_t)(0x1000)
-#define CY_FX_UVC_XU_TLC_RW                                 (uint16_t)(0x1100)
+#define CY_FX_UVC_XU_IR_RW                                  (uint16_t)(0x1100)
 #define CY_FX_UVC_XU_SPLAH_RW                               (uint16_t)(0x1200)
+#define CY_FX_UVC_XU_DEBUG_RW                               (uint16_t)(0x1300)
 
 extern void CyFxAppErrorHandler(CyU3PReturnStatus_t apiRetStatus);
 #endif  // FIRMWARE_INCLUDE_UVC_H_
