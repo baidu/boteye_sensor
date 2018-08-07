@@ -33,7 +33,7 @@
 //                             ((y_odd_inc + 1) / 2) + min_vertical_blanking
 // TODO(zhoury): max frame rate is 23Hz at 27MHz
 #define CLK_PIX            27000000
-#define FRAME_FPS          25
+#define FRAME_FPS          10
 #define FRAME_LENGTH_LINES 750    // defalut: 750(0x02EE)  0x00E2=226 0x05DC=1500
 #define EXTRA_DELAY        0
 #define LINE_LENGTH_PCK    ((CLK_PIX / FRAME_FPS -  EXTRA_DELAY)/ FRAME_LENGTH_LINES)
