@@ -6,6 +6,7 @@ if [ $# -eq 0 ]; then
     gcc -o imu_test imu_test.c
     gcc -o version_test version_test.c
     gcc -o deviceID_test device_id.c
+    gcc -o calib_file_test calib_file_test.c
 elif [ $# -eq 1 -a $1 = "clean" ]; then
     rm -rf *_test
 fi

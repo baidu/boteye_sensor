@@ -59,7 +59,8 @@ enum  SensorType {
   XP3s = 3,
   XPIRL = 4,
   XPIRL2 = 5,
-  XPIRL3 = 6
+  XPIRL3 = 6,
+  XPIRL3_A = 7
 };
 extern enum SensorType sensor_type;
 extern CyU3PEvent    glFxUVCEvent;
@@ -286,6 +287,7 @@ extern volatile CyBool_t IR_image_trigger;
 #define CY_FX_UVC_XU_IR_RW                                  (uint16_t)(0x1100)
 #define CY_FX_UVC_XU_SPLAH_RW                               (uint16_t)(0x1200)
 #define CY_FX_UVC_XU_DEBUG_RW                               (uint16_t)(0x1300)
+#define CY_FX_UVC_XU_CALIB_RW                               (uint16_t)(0x1400)
 
 extern void CyFxAppErrorHandler(CyU3PReturnStatus_t apiRetStatus);
 #endif  // FIRMWARE_INCLUDE_UVC_H_

@@ -212,10 +212,10 @@ void xpril3_proc_ir_ctl(struct IR_ctl_t* IR_ctrl) {
   if (IR_ctrl->Set_infrared_mode == 1 && IR_ctrl->Set_structured_mode == 1) {
     sensor_info("open Both structured and infrared Light, pwm:0x%x\r\n", IR_ctrl->pwm_value);
     tlc59108_heptagon_open(IR_ctrl->pwm_value);
-    tlc59108_LIMA_ON();
+    tlc59108_LIMA_open(IR_ctrl->pwm_value);
   } else if (IR_ctrl->Set_infrared_mode == 1 && IR_ctrl->Set_structured_mode == 0) {
     sensor_info("Only open Infrared Light, pwm:0x%x\r\n", IR_ctrl->pwm_value);
-    tlc59108_LIMA_ON();
+    tlc59108_LIMA_open(IR_ctrl->pwm_value);
     tlc59108_heptagon_close();
   } else if (IR_ctrl->Set_infrared_mode == 0 && IR_ctrl->Set_structured_mode == 1) {
     sensor_info("Only open structured Light, pwm:0x%x\r\n", IR_ctrl->pwm_value);

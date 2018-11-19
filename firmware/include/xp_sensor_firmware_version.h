@@ -1,11 +1,11 @@
 #ifndef __XP_SENSOR_FIRMWARE_VERSION_H__
 #define __XP_SENSOR_FIRMWARE_VERSION_H__
 
-#define FIRMWARE_VERSION "V0.6.5-366de54-commit"
+#define FIRMWARE_VERSION "V0.9.10-bf037c7-dirty!"
 
-#define COMPILE_BY "jingxi"
-#define COMPILE_HOST "jingxi-Lenovo-ideapad-FLEX-4-1570"
-#define COMPILE_TIME "16:24:30"
-#define COMPILE_DATE "2018-02-09"
+#define COMPILE_BY "yanghongtian"
+#define COMPILE_HOST "xper"
+#define COMPILE_TIME "15:49:25"
+#define COMPILE_DATE "2018-11-19"
 
 #endif

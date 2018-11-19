@@ -433,6 +433,7 @@ void update_v034_flip_left(void) {
   case XP_XP2:
   case XPIRL2:
   case XPIRL3:
+  case XPIRL3_A:
     MT9V034_Parallel[(0x0D -1) * 2 + 1] = 0x0300;
     break;
   case XP2s:
@@ -452,6 +453,7 @@ void update_v034_flip_right(void) {
   case XP_XP2:
   case XPIRL2:
   case XPIRL3:
+  case XPIRL3_A:
   case XP2s:
   case XP3:
     MT9V034_Parallel[(0x0D -1) * 2 + 1] = 0x0300;

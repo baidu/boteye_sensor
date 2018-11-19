@@ -30,6 +30,19 @@ struct flash_struct_t {
   uint8_t tmp[223];
 };
 
+// CALIB RW len is 255
+#define CALIB_RW_LEN  255
+#define PAYLOAD_LEN (CALIB_RW_LEN - 7)
+typedef struct {
+  uint8_t header[2];                 // header[0]=0xAA, header[1]=0x55
+  uint8_t packet_total;              // indicates how many packets
+  uint8_t packet_len;                // length of packet
+  uint8_t id;                        // start from 0 to 255
+  uint8_t data[PAYLOAD_LEN];         // payload
+  uint8_t check_sum[2];              // check sum from header[0] to data[PAYLOAD_LEN-1],
+                                     // LSB first, MSB last
+} calib_struct_t;
+
 /* function declaration */
 void EU_Rqts_imu_rw(uint8_t bRequest);
 void EU_Rqts_imu_burst(uint8_t bRequest);
@@ -56,5 +69,6 @@ extern volatile char last_imu[IMU_BURST_LEN];
  * */
 #define IMU_LOOP_SAMPLE
 #define  DEVICE_MSG_ADDR      (0x40000 / 0x100)
+#define DEVICE_CALIB_ADDR     (0x50000 / 0x100)
 
 #endif  // FIRMWARE_INCLUDE_EXTENSION_UNIT_H_

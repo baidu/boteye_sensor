@@ -31,7 +31,7 @@ char *Baidu_ProductDscr[16] = {
   "Baidu_Robotics_vision_XPIRL",
   "Baidu_Robotics_vision_XPIRL2",
   "Baidu_Robotics_vision_XPIRL3",
-  "Baidu_Robotics_vision_undefined_0111",
+  "Baidu_Robotics_vision_XPIRL3_A",
   "Baidu_Robotics_vision_undefined_1000",
   "Baidu_Robotics_vision_undefined_1001",
   "Baidu_Robotics_vision_undefined_1010",
@@ -183,7 +183,7 @@ void fx3_gpio_module_init(void) {
   gpioConfig.driveHighEn = CyTrue;
   gpioConfig.inputEn     = CyFalse;
   gpioConfig.intrMode    = CY_U3P_GPIO_NO_INTR;
-  if (sensor_type == XPIRL2 || sensor_type == XPIRL3) {
+  if (sensor_type == XPIRL2 || sensor_type == XPIRL3 || sensor_type == XPIRL3_A) {
     /* AR0141 CMOS_OE ENABLE(acitve LOW) */
     gpioConfig.outValue  = CyFalse;
   } else {
@@ -195,7 +195,7 @@ void fx3_gpio_module_init(void) {
     sensor_err("IMU GPIO Set Config Error, Error Code = 0x%x\r\n", apiRetStatus);
     CyFxAppErrorHandler(apiRetStatus);
   }
-  if (sensor_type == XPIRL2 || sensor_type == XPIRL3)
+  if (sensor_type == XPIRL2 || sensor_type == XPIRL3 || sensor_type == XPIRL3_A)
     fx3_LIMA_GPIO_init();
 }
 /**
@@ -370,7 +370,7 @@ void sensor_gpio_init(void) {
     sensor_err("camera reset GPIO Set Value Error, Error Code = 0x%x\r\n", apiRetStatus);
     return;
   }
-  if (sensor_type == XPIRL2 || sensor_type == XPIRL3) {
+  if (sensor_type == XPIRL2 || sensor_type == XPIRL3 || sensor_type == XPIRL3_A) {
     /* AR0141 CMOS_OE ENABLE(acitve LOW) */
     apiRetStatus = CyU3PGpioSetValue(CAMERA_OE_GPIO, CyFalse);
   } else {

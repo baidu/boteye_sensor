@@ -57,7 +57,8 @@
   Every sector size = 64KB, All sector is 512KB
   Sector 0 - 3 [0 - 256KB] is boot flash.
   Secotr 4 is Device message, include: Device ID
-  Secotr 5 - 7 is not used now.
+  Sector 5 is Device calib file, 
+  Secotr 6 - 7 is not used now.
   */
 uint16_t glSpiPageSize = 0x100;  /* SPI Page size to be used for transfers. */
 
@@ -249,7 +250,7 @@ void EU_Rqts_cam_reg(uint8_t bRequest) {
     // sensor_dbg("EU request camera reg get cur\r\n");
     Ep0Buffer[0] = read_reg_addr >> 8;
     Ep0Buffer[1] = read_reg_addr & 0xFF;
-    if (sensor_type == XPIRL2 || sensor_type == XPIRL3)
+    if (sensor_type == XPIRL2 || sensor_type == XPIRL3 || sensor_type == XPIRL3_A)
       readval = AR0141_RegisterRead(Ep0Buffer[0], Ep0Buffer[1]);
     else
       readval = V034_RegisterRead(Ep0Buffer[0], Ep0Buffer[1]);
@@ -275,7 +276,7 @@ void EU_Rqts_cam_reg(uint8_t bRequest) {
       LowAddr  = Ep0Buffer[1];
       HighData = Ep0Buffer[2];
       LowData  = Ep0Buffer[3];
-      if (sensor_type == XPIRL2 || sensor_type == XPIRL3)
+      if (sensor_type == XPIRL2 || sensor_type == XPIRL3 || sensor_type == XPIRL3_A)
         AR0141_RegisterWrite(HighAddr, LowAddr, HighData, LowData);
       else
         V034_RegisterWrite(HighAddr, LowAddr, HighData, LowData);
@@ -593,6 +594,97 @@ void EU_Rqts_debug_RW(uint8_t bRequest) {
     }
     debug_variable1 = *debug_ptr;
     debug_variable2 = *(debug_ptr + 1);
+    break;
+  case CY_FX_USB_UVC_GET_LEN_REQ:
+    Ep0Buffer[0] = 255;
+    Ep0Buffer[1] = 0;
+    CyU3PUsbSendEP0Data(2, (uint8_t *)Ep0Buffer);
+    break;
+  case CY_FX_USB_UVC_GET_INFO_REQ:
+    Ep0Buffer[0] = 3;
+    CyU3PUsbSendEP0Data(1, (uint8_t *)Ep0Buffer);
+    break;
+  default:
+    sensor_err("unknown flash cmd: 0x%x\r\n", bRequest);
+    CyU3PUsbStall(0, CyTrue, CyFalse);
+    break;
+  }
+}
+
+/**
+ *  @brief      read or write calibration file from/to spi flash.
+ *  @param[out] bRequest    bRequst value of uvc.
+ *  @return     NULL.
+ */
+void EU_Rqts_calib_RW(uint8_t bRequest) {
+  uint8_t Ep0Buffer[32] = {0};
+  calib_struct_t calib_store;
+  uint16_t calib_len = sizeof (calib_struct_t);
+  uint16_t readCount;
+  CyU3PReturnStatus_t apiRetStatus = CY_U3P_SUCCESS;
+  static uint8_t read_loop = 0;
+  static uint8_t write_loop = 0;
+
+  switch (bRequest) {
+  case CY_FX_USB_UVC_GET_CUR_REQ:
+    sensor_dbg("read calib file\r\n");
+    CyU3PMemSet ((uint8_t *)(&calib_store), 0, calib_len);
+    apiRetStatus = CyFxFlashProgSpiTransfer(DEVICE_CALIB_ADDR + read_loop, calib_len, (uint8_t *)(&calib_store),
+                                            CyTrue);
+    sensor_info("header: 0x%x 0x%x, total: 0x%x, id: 0x%x, readCount:%d\r\n", 
+                calib_store.header[0], calib_store.header[1], calib_store.packet_total, calib_store.id, readCount);
+    if (read_loop == calib_store.id) {
+      sensor_info("read device calib info: 0x%x 0x%x %d %d\r\n", 
+                  calib_store.header[0], 
+                  calib_store.header[1],
+                  calib_store.packet_total,
+                  calib_store.id);
+      CyU3PUsbSendEP0Data(calib_len, (uint8_t *)(&calib_store));
+      sensor_info("read done!\r\n");
+      if (++read_loop >= calib_store.packet_total) {
+        read_loop = 0;
+      }
+    } else {
+      // go to original loop status
+      read_loop = 0;
+    } 
+    break;
+  case CY_FX_USB_UVC_SET_CUR_REQ:
+    sensor_dbg("write calib file\r\n");
+    CyU3PMemSet ((uint8_t *)(&calib_store), 0, calib_len);
+    apiRetStatus = CyU3PUsbGetEP0Data(calib_len, (uint8_t *)(&calib_store), &readCount);
+    if (apiRetStatus != CY_U3P_SUCCESS) {
+      sensor_err("CyU3 get Ep0 data failed\r\n");
+      CyFxAppErrorHandler(apiRetStatus);
+      break;
+    }
+    sensor_info("header: 0x%x 0x%x, total: 0x%x, id: 0x%x, readCount:%d\r\n", 
+                calib_store.header[0], calib_store.header[1], calib_store.packet_total, calib_store.id, readCount);
+    // write flash
+    //sensor_info("write device ID: %s\n", flash_store.Sensor_ID);
+    // Only erase sector the first time in loop
+    if (write_loop == 0) {
+      CyFxFlashProgEraseSector(CyTrue, 5, Ep0Buffer);
+      sensor_info("Erase the %dth sector(begin from 0)\r\n", 5);
+    }
+    if (write_loop == calib_store.id) {
+      apiRetStatus = CyFxFlashProgSpiTransfer(DEVICE_CALIB_ADDR + write_loop, 
+                                              calib_len, 
+                                              (uint8_t *)(&calib_store),
+                                              CyFalse);
+      sensor_info("write flash addr:0x%x len:%d\r\n", 
+                  (DEVICE_CALIB_ADDR + write_loop)*glSpiPageSize,
+                  calib_len);
+      if (apiRetStatus != CY_U3P_SUCCESS) {
+        sensor_err("Write Flash error\r\n");
+      }
+      if (++write_loop >= calib_store.packet_total) {
+        write_loop = 0;
+      }
+    } else {
+      // go to original loop status
+      write_loop = 0;
+    }
     break;
   case CY_FX_USB_UVC_GET_LEN_REQ:
     Ep0Buffer[0] = 255;

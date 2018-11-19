@@ -663,7 +663,7 @@ void update_hard_version_dscr(void) {
 void update_HS_config_dscr(enum SensorType sensor_type) {
   uint16_t width = 0;
   uint16_t height = 0;
-  if (sensor_type == XPIRL2 || sensor_type == XPIRL3) {
+  if (sensor_type == XPIRL2 || sensor_type == XPIRL3 || sensor_type == XPIRL3_A) {
     width = 1280;
     height = 720;
   } else {
@@ -686,7 +686,7 @@ void update_HS_config_dscr(enum SensorType sensor_type) {
 void update_SS_config_dscr(enum SensorType sensor_type) {
   uint16_t width = 0;
   uint16_t height = 0;
-  if (sensor_type == XPIRL2 || sensor_type == XPIRL3) {
+  if (sensor_type == XPIRL2 || sensor_type == XPIRL3 || sensor_type == XPIRL3_A) {
     width = 1280;
     height = 720;
   } else {

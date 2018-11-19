@@ -217,7 +217,8 @@ void CyFxUVCAddHeader_IMU(uint8_t *buffer_p) {
     }
     CyU3PMutexPut(&(IMU_kfifo.lock));
   }
-  if ((sensor_type == XPIRL2 || sensor_type == XPIRL3) && IR_image_trigger == CyFalse) {
+  if ((sensor_type == XPIRL2 || sensor_type == XPIRL3 || sensor_type == XPIRL3_A) &&
+      IR_image_trigger == CyFalse) {
     *(buffer_p + 0) = 'R';
     *(buffer_p + 1) = 'G';
     *(buffer_p + 2) = 'B';
@@ -684,7 +685,7 @@ static void CyFxUVCApplnInit(void) {
   CyU3PThreadSleep(100);
   readyIMU = CyTrue;
   sensor_dbg("IMU is ready!\r\n");
-  if (sensor_type == XPIRL2 || sensor_type == XPIRL3) {
+  if (sensor_type == XPIRL2 || sensor_type == XPIRL3 || sensor_type == XPIRL3_A) {
     /* Initialize AR0141 senosr */
     AR0141_sensor_init();
   } else {
@@ -698,7 +699,7 @@ static void CyFxUVCApplnInit(void) {
   if (sensor_type == XPIRL2) {
     tlc59116_init();
     tlc59116_all_close();
-  } else if (sensor_type == XPIRL3) {
+  } else if (sensor_type == XPIRL3 || sensor_type == XPIRL3_A) {
     tlc59108_init();
     tlc59108_all_close();
   }
@@ -873,7 +874,7 @@ void UVC_AppThread_Entry(uint32_t input) {
    This sequence ensures that we do not get stuck in a loop where we are trying to send data instead
    of handling the abort request.
  */
-  if (sensor_type == XPIRL2 || sensor_type == XPIRL3) {
+  if (sensor_type == XPIRL2 || sensor_type == XPIRL3 || sensor_type == XPIRL3_A) {
     cols = 1280;
   } else {
     cols = 640;
@@ -975,11 +976,11 @@ void UVC_AppThread_Entry(uint32_t input) {
 
         IMU_kfifo.kfifo_flag &= ~KFIFO_IS_START;
         sensor_dbg("got CY_FX_UVC_STREAM_ABORT_EVENT \r\n");
-        if (sensor_type == XPIRL2 || sensor_type == XPIRL3) {
+        if (sensor_type == XPIRL2 || sensor_type == XPIRL3 || sensor_type == XPIRL3_A) {
           AR0141_stream_stop(AR0141_ADDR_WR);
           if (sensor_type == XPIRL2)
             tlc59116_all_close();
-          else if (sensor_type == XPIRL3)
+          else if (sensor_type == XPIRL3 || sensor_type == XPIRL3_A)
             tlc59108_all_close();
           IR_LED_OFF();
         } else {
@@ -1344,6 +1345,9 @@ static void Handle_ExtensionUnit_Rqts(void) {
   case CY_FX_UVC_XU_DEBUG_RW:
     EU_Rqts_debug_RW(bRequest);
     break;
+  case CY_FX_UVC_XU_CALIB_RW:
+    EU_Rqts_calib_RW(bRequest);
+    break;
   default:
     sensor_err("invalid extension cmd: 0x%x\r\n", wValue);
     CyU3PUsbStall(0, CyTrue, CyFalse);
@@ -1452,7 +1456,7 @@ static void Handle_VideoStreaming_Rqts(void) {
         res_switch++;
         sensor_set_power_mode(SENSOR_ACTIVE);
         CyU3PThreadSleep(10);
-        if (sensor_type == XPIRL2 || sensor_type == XPIRL3) {
+        if (sensor_type == XPIRL2 || sensor_type == XPIRL3 || sensor_type == XPIRL3_A) {
           AR0141_stream_start(AR0141_ADDR_WR);
         } else {
           V034_stream_start(SENSOR_ADDR_WR);
@@ -1610,7 +1614,7 @@ void Data_handle_Thread_Entry(uint32_t input) {
       count = 0;
       // As hardware design error, tl59116 of XPIRL2 can't power down when cypress sleep, which will
       // make hepatgon can't turn on randomly.
-      if (sensor_type == XPIRL3)
+      if (sensor_type == XPIRL3 || sensor_type == XPIRL3_A)
         tlc_power_OFF();
     }
     CyFxPowerManage();
@@ -1654,8 +1658,8 @@ void CyFxPowerManage(void) {
 
         sensor_dbg("Suspend Wakeup Success wakeup source %d\r\n", waketype);
       }
-      // TODO(zhoury) resume XPIRL3
-      if (sensor_type == XPIRL3) {
+      // TODO(zhoury) resume XPIRL3 and XPIRL3_A
+      if (sensor_type == XPIRL3 || sensor_type == XPIRL3_A) {
         tlc_power_ON();
         CyU3PThreadSleep(10);
         tlc59108_init();
